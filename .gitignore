@@ -28,6 +28,8 @@ website/node_modules
 
 website/vendor
 
+local-tests/
+
 # Test exclusions
 !command/test-fixtures/**/*.tfstate
 !command/test-fixtures/**/.terraform/
