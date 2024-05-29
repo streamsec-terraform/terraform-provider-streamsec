@@ -34,7 +34,6 @@ type AWSAccountResourceModel struct {
 	DisplayName              types.String `tfsdk:"display_name"`
 	CloudAccountID           types.String `tfsdk:"cloud_account_id"`
 	CloudRegions             types.List   `tfsdk:"cloud_regions"`
-	StackRegion              types.String `tfsdk:"stack_region"`
 	TemplateURL              types.String `tfsdk:"template_url"`
 	ExternalID               types.String `tfsdk:"external_id"`
 	StreamSecCollectionToken types.String `tfsdk:"streamsec_collection_token"`
@@ -76,10 +75,6 @@ func (r *AWSAccountResource) Schema(ctx context.Context, req resource.SchemaRequ
 			"cloud_regions": schema.ListAttribute{
 				ElementType: types.StringType,
 				Description: "The cloud regions.",
-				Required:    true,
-			},
-			"stack_region": schema.StringAttribute{
-				Description: "The stack region.",
 				Required:    true,
 			},
 			"template_url": schema.StringAttribute{
@@ -144,13 +139,12 @@ func (r *AWSAccountResource) Create(ctx context.Context, req resource.CreateRequ
 	}
 
 	query := `
-		mutation CreateAccount($account_type: CloudProvider!, $cloud_account_id: String!, $display_name: String, $cloud_regions: [String], $stack_region: String) {
+		mutation CreateAccount($account_type: CloudProvider!, $cloud_account_id: String!, $display_name: String, $cloud_regions: [String]) {
 			createAccount(account: {
 				account_type: $account_type,
 				cloud_account_id: $cloud_account_id,
 				display_name: $display_name,
 				cloud_regions: $cloud_regions,
-				stack_region: $stack_region
 			  })
 			{
 				_id
@@ -166,7 +160,6 @@ func (r *AWSAccountResource) Create(ctx context.Context, req resource.CreateRequ
 		"cloud_account_id": data.CloudAccountID.ValueString(),
 		"display_name":     data.DisplayName.ValueString(),
 		"cloud_regions":    utils.ConvertToStringSlice(data.CloudRegions.Elements()), // Fix: Access the Value field directly
-		"stack_region":     data.StackRegion.ValueString(),
 	}
 
 	tflog.Debug(ctx, fmt.Sprintf("variables: %v", variables))
@@ -213,7 +206,6 @@ func (r *AWSAccountResource) Read(ctx context.Context, req resource.ReadRequest,
 				cloud_account_id
 				display_name
 				cloud_regions
-				stack_region
 				template_url
 				external_id
 				lightlytics_collection_token
@@ -238,7 +230,6 @@ func (r *AWSAccountResource) Read(ctx context.Context, req resource.ReadRequest,
 			data.ID = types.StringValue(account["_id"].(string))
 			data.DisplayName = types.StringValue(account["display_name"].(string))
 			data.CloudRegions = utils.ConvertInterfaceToTypesList(account["cloud_regions"].([]interface{}))
-			data.StackRegion = types.StringValue(account["stack_region"].(string))
 			data.TemplateURL = types.StringValue(account["template_url"].(string))
 			data.ExternalID = types.StringValue(account["external_id"].(string))
 			data.StreamSecCollectionToken = types.StringValue(account["lightlytics_collection_token"].(string))

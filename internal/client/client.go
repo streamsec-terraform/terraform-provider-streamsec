@@ -71,10 +71,29 @@ func (c *Client) DoRequest(query string, variables map[string]interface{}) (map[
 		req.Header.Set("customer", c.Workspace)
 	}
 
-	if variables != nil {
-		for key, value := range variables {
-			req.Var(key, value)
-		}
+	for key, value := range variables {
+		req.Var(key, value)
+	}
+
+	// define a Context for the request
+	ctx := context.Background()
+
+	// run it and capture the response
+	var data map[string]interface{}
+	if err := c.graphqlClient.Run(ctx, req, &data); err != nil {
+		return nil, err
+	}
+
+	return data, nil
+}
+
+func (c *Client) DoRequestWithToken(query string, variables map[string]interface{}, authToken string) (map[string]interface{}, error) {
+	req := graphql.NewRequest(query)
+
+	req.Header.Set("Authorization", "Bearer "+authToken)
+
+	for key, value := range variables {
+		req.Var(key, value)
 	}
 
 	// define a Context for the request
