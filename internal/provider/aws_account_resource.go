@@ -210,6 +210,7 @@ func (r *AWSAccountResource) Read(ctx context.Context, req resource.ReadRequest,
 				external_id
 				lightlytics_collection_token
 				account_auth_token
+				status
 			}
 		}`
 
@@ -227,6 +228,10 @@ func (r *AWSAccountResource) Read(ctx context.Context, req resource.ReadRequest,
 
 		account := acc.(map[string]interface{})
 		if account["cloud_account_id"].(string) == data.CloudAccountID.ValueString() {
+			if account["status"].(string) == "DELETING" {
+				resp.Diagnostics.AddError("Resource status is DELETING", fmt.Sprintf("Account with cloud_account_id: %s is being deleted.", data.CloudAccountID.ValueString()))
+				return
+			}
 			data.ID = types.StringValue(account["_id"].(string))
 			data.DisplayName = types.StringValue(account["display_name"].(string))
 			data.CloudRegions = utils.ConvertInterfaceToTypesList(account["cloud_regions"].([]interface{}))
