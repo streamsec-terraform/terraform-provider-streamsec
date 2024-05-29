@@ -132,7 +132,7 @@ func (r *EKSClusterResource) Create(ctx context.Context, req resource.CreateRequ
 
 	variables := map[string]interface{}{
 		"display_name": data.DisplayName.ValueString(),
-		"arn":          data.ARN}
+		"arn":          data.ARN.ValueString()}
 
 	tflog.Debug(ctx, fmt.Sprintf("variables: %v", variables))
 
