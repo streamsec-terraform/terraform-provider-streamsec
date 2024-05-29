@@ -15,17 +15,17 @@ import (
 )
 
 // Ensure provider defined types fully satisfy framework interfaces.
-var _ resource.Resource = &EKSClusterResource{}
-var _ resource.ResourceWithImportState = &EKSClusterResource{}
+var _ resource.Resource = &AWSKubernetesClusterResource{}
+var _ resource.ResourceWithImportState = &AWSKubernetesClusterResource{}
 
-func NewEKSClusterResource() resource.Resource {
-	return &EKSClusterResource{}
+func NewAWSKubernetesClusterResource() resource.Resource {
+	return &AWSKubernetesClusterResource{}
 }
 
-type EKSClusterResource struct {
+type AWSKubernetesClusterResource struct {
 	client *client.Client
 }
-type EKSClusterResourceModel struct {
+type AWSKubernetesClusterResourceModel struct {
 	ID              types.String `tfsdk:"id"`
 	ARN             types.String `tfsdk:"arn"`
 	DisplayName     types.String `tfsdk:"display_name"`
@@ -34,14 +34,14 @@ type EKSClusterResourceModel struct {
 	CreationDate    types.String `tfsdk:"creation_date"`
 }
 
-func (r *EKSClusterResource) Metadata(ctx context.Context, req resource.MetadataRequest, resp *resource.MetadataResponse) {
-	resp.TypeName = req.ProviderTypeName + "_eks_cluster"
+func (r *AWSKubernetesClusterResource) Metadata(ctx context.Context, req resource.MetadataRequest, resp *resource.MetadataResponse) {
+	resp.TypeName = req.ProviderTypeName + "_aws_kubernetes_cluster"
 }
 
-func (r *EKSClusterResource) Schema(ctx context.Context, req resource.SchemaRequest, resp *resource.SchemaResponse) {
+func (r *AWSKubernetesClusterResource) Schema(ctx context.Context, req resource.SchemaRequest, resp *resource.SchemaResponse) {
 	resp.Schema = schema.Schema{
 		// This description is used by the documentation generator and the language server.
-		MarkdownDescription: "EKSCluster resource",
+		MarkdownDescription: "AWSKubernetesCluster resource",
 
 		Attributes: map[string]schema.Attribute{
 			"id": schema.StringAttribute{
@@ -87,7 +87,7 @@ func (r *EKSClusterResource) Schema(ctx context.Context, req resource.SchemaRequ
 	}
 }
 
-func (r *EKSClusterResource) Configure(ctx context.Context, req resource.ConfigureRequest, resp *resource.ConfigureResponse) {
+func (r *AWSKubernetesClusterResource) Configure(ctx context.Context, req resource.ConfigureRequest, resp *resource.ConfigureResponse) {
 	// Prevent panic if the provider has not been configured.
 	if req.ProviderData == nil {
 		return
@@ -106,8 +106,8 @@ func (r *EKSClusterResource) Configure(ctx context.Context, req resource.Configu
 	r.client = client
 }
 
-func (r *EKSClusterResource) Create(ctx context.Context, req resource.CreateRequest, resp *resource.CreateResponse) {
-	var data EKSClusterResourceModel
+func (r *AWSKubernetesClusterResource) Create(ctx context.Context, req resource.CreateRequest, resp *resource.CreateResponse) {
+	var data AWSKubernetesClusterResourceModel
 
 	// Read Terraform plan data into the model
 	resp.Diagnostics.Append(req.Plan.Get(ctx, &data)...)
@@ -159,8 +159,8 @@ func (r *EKSClusterResource) Create(ctx context.Context, req resource.CreateRequ
 	resp.Diagnostics.Append(resp.State.Set(ctx, &data)...)
 }
 
-func (r *EKSClusterResource) Read(ctx context.Context, req resource.ReadRequest, resp *resource.ReadResponse) {
-	var data EKSClusterResourceModel
+func (r *AWSKubernetesClusterResource) Read(ctx context.Context, req resource.ReadRequest, resp *resource.ReadResponse) {
+	var data AWSKubernetesClusterResourceModel
 
 	// Read Terraform prior state data into the model
 	resp.Diagnostics.Append(req.State.Get(ctx, &data)...)
@@ -177,6 +177,7 @@ func (r *EKSClusterResource) Read(ctx context.Context, req resource.ReadRequest,
 				status
 				collection_token
 				creation_date
+				eks_arn
 			}
 		}`
 
@@ -211,9 +212,9 @@ func (r *EKSClusterResource) Read(ctx context.Context, req resource.ReadRequest,
 	resp.Diagnostics.Append(resp.State.Set(ctx, &data)...)
 }
 
-func (r *EKSClusterResource) Update(ctx context.Context, req resource.UpdateRequest, resp *resource.UpdateResponse) {
-	var data EKSClusterResourceModel
-	var state EKSClusterResourceModel
+func (r *AWSKubernetesClusterResource) Update(ctx context.Context, req resource.UpdateRequest, resp *resource.UpdateResponse) {
+	var data AWSKubernetesClusterResourceModel
+	var state AWSKubernetesClusterResourceModel
 
 	// Read Terraform plan data into the model
 	resp.Diagnostics.Append(req.Plan.Get(ctx, &data)...)
@@ -252,8 +253,8 @@ func (r *EKSClusterResource) Update(ctx context.Context, req resource.UpdateRequ
 	resp.Diagnostics.Append(resp.State.Set(ctx, &data)...)
 }
 
-func (r *EKSClusterResource) Delete(ctx context.Context, req resource.DeleteRequest, resp *resource.DeleteResponse) {
-	var data EKSClusterResourceModel
+func (r *AWSKubernetesClusterResource) Delete(ctx context.Context, req resource.DeleteRequest, resp *resource.DeleteResponse) {
+	var data AWSKubernetesClusterResourceModel
 
 	// Read Terraform prior state data into the model
 	resp.Diagnostics.Append(req.State.Get(ctx, &data)...)
@@ -278,6 +279,6 @@ func (r *EKSClusterResource) Delete(ctx context.Context, req resource.DeleteRequ
 	}
 }
 
-func (r *EKSClusterResource) ImportState(ctx context.Context, req resource.ImportStateRequest, resp *resource.ImportStateResponse) {
+func (r *AWSKubernetesClusterResource) ImportState(ctx context.Context, req resource.ImportStateRequest, resp *resource.ImportStateResponse) {
 	resource.ImportStatePassthroughID(ctx, path.Root("arn"), req, resp)
 }
