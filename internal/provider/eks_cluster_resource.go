@@ -27,7 +27,7 @@ type EKSClusterResource struct {
 }
 type EKSClusterResourceModel struct {
 	ID              types.String `tfsdk:"id"`
-	EKSArn          types.String `tfsdk:"eks_arn"`
+	ARN             types.String `tfsdk:"arn"`
 	DisplayName     types.String `tfsdk:"display_name"`
 	Status          types.String `tfsdk:"status"`
 	CollectionToken types.String `tfsdk:"collection_token"`
@@ -51,7 +51,7 @@ func (r *EKSClusterResource) Schema(ctx context.Context, req resource.SchemaRequ
 					stringplanmodifier.UseStateForUnknown(),
 				},
 			},
-			"eks_arn": schema.StringAttribute{
+			"arn": schema.StringAttribute{
 				Description: "The arn of the EKS cluster.",
 				Required:    true,
 				PlanModifiers: []planmodifier.String{
@@ -117,10 +117,10 @@ func (r *EKSClusterResource) Create(ctx context.Context, req resource.CreateRequ
 	}
 
 	query := `
-		mutation CreateKubernetes($display_name: String, $eks_arn: String) {
+		mutation CreateKubernetes($display_name: String, $arn: String) {
 			createKubernetes(kubernetes: {
 				display_name: $display_name,
-				eks_arn: $eks_arn,
+				eks_arn: $arn,
 			  })
 			{
 				_id
@@ -132,7 +132,7 @@ func (r *EKSClusterResource) Create(ctx context.Context, req resource.CreateRequ
 
 	variables := map[string]interface{}{
 		"display_name": data.DisplayName.ValueString(),
-		"eks_arn":      data.EKSArn}
+		"arn":          data.ARN}
 
 	tflog.Debug(ctx, fmt.Sprintf("variables: %v", variables))
 
@@ -193,7 +193,7 @@ func (r *EKSClusterResource) Read(ctx context.Context, req resource.ReadRequest,
 	for _, item := range clusters {
 
 		cluster := item.(map[string]interface{})
-		if cluster["eks_arn"].(string) == data.EKSArn.ValueString() {
+		if cluster["eks_arn"].(string) == data.ARN.ValueString() {
 			data.ID = types.StringValue(cluster["_id"].(string))
 			data.DisplayName = types.StringValue(cluster["display_name"].(string))
 			data.Status = types.StringValue(cluster["status"].(string))
@@ -204,7 +204,7 @@ func (r *EKSClusterResource) Read(ctx context.Context, req resource.ReadRequest,
 	}
 
 	if !clusterFound {
-		resp.Diagnostics.AddError("Resource not found", fmt.Sprintf("Unable to get EKS cluster, cluster with ARN: %s not found in Stream.Security API.", data.EKSArn.ValueString()))
+		resp.Diagnostics.AddError("Resource not found", fmt.Sprintf("Unable to get EKS cluster, cluster with ARN: %s not found in Stream.Security API.", data.ARN.ValueString()))
 		return
 	}
 
@@ -279,5 +279,5 @@ func (r *EKSClusterResource) Delete(ctx context.Context, req resource.DeleteRequ
 }
 
 func (r *EKSClusterResource) ImportState(ctx context.Context, req resource.ImportStateRequest, resp *resource.ImportStateResponse) {
-	resource.ImportStatePassthroughID(ctx, path.Root("eks_arn"), req, resp)
+	resource.ImportStatePassthroughID(ctx, path.Root("arn"), req, resp)
 }
