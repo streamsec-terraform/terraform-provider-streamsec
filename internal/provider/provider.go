@@ -187,6 +187,7 @@ func (p *StreamsecProvider) Configure(ctx context.Context, req provider.Configur
 func (p *StreamsecProvider) Resources(ctx context.Context) []func() resource.Resource {
 	return []func() resource.Resource{
 		NewAWSAccountResource,
+		NewEKSClusterResource,
 	}
 }
 
