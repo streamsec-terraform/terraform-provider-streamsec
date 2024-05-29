@@ -4,7 +4,6 @@ import (
 	"context"
 	"fmt"
 	"terraform-provider-streamsec/internal/client"
-	"terraform-provider-streamsec/internal/utils"
 
 	"github.com/hashicorp/terraform-plugin-framework/path"
 	"github.com/hashicorp/terraform-plugin-framework/resource"
@@ -55,6 +54,9 @@ func (r *EKSClusterResource) Schema(ctx context.Context, req resource.SchemaRequ
 			"eks_arn": schema.StringAttribute{
 				Description: "The arn of the EKS cluster.",
 				Required:    true,
+				PlanModifiers: []planmodifier.String{
+					stringplanmodifier.RequiresReplace(),
+				},
 			},
 			"display_name": schema.StringAttribute{
 				Description: "The display name of the EKS cluster.",
@@ -70,10 +72,16 @@ func (r *EKSClusterResource) Schema(ctx context.Context, req resource.SchemaRequ
 			"collection_token": schema.StringAttribute{
 				Description: "The collection_token.",
 				Computed:    true,
+				PlanModifiers: []planmodifier.String{
+					stringplanmodifier.UseStateForUnknown(),
+				},
 			},
 			"creation_date": schema.StringAttribute{
 				Description: "The creation_date.",
 				Computed:    true,
+				PlanModifiers: []planmodifier.String{
+					stringplanmodifier.UseStateForUnknown(),
+				},
 			},
 		},
 	}
@@ -163,17 +171,12 @@ func (r *EKSClusterResource) Read(ctx context.Context, req resource.ReadRequest,
 
 	query := `
 		query {
-			accounts {
+			kubernetes {
 				_id
-				account_type
-				cloud_account_id
 				display_name
-				cloud_regions
-				stack_region
-				template_url
-				external_id
-				lightlytics_collection_token
-				account_auth_token
+				status
+				collection_token
+				creation_date
 			}
 		}`
 
@@ -184,28 +187,24 @@ func (r *EKSClusterResource) Read(ctx context.Context, req resource.ReadRequest,
 		return
 	}
 
-	accounts := res["accounts"].([]interface{})
-	accountFound := false
+	clusters := res["kubernetes"].([]interface{})
+	clusterFound := false
 
-	for _, acc := range accounts {
+	for _, item := range clusters {
 
-		account := acc.(map[string]interface{})
-		if account["cloud_account_id"].(string) == data.CloudAccountID.ValueString() {
-			data.ID = types.StringValue(account["_id"].(string))
-			data.DisplayName = types.StringValue(account["display_name"].(string))
-			data.CloudRegions = utils.ConvertInterfaceToTypesList(account["cloud_regions"].([]interface{}))
-			data.StackRegion = types.StringValue(account["stack_region"].(string))
-			data.TemplateURL = types.StringValue(account["template_url"].(string))
-			data.ExternalID = types.StringValue(account["external_id"].(string))
-			data.StreamSecCollectionToken = types.StringValue(account["lightlytics_collection_token"].(string))
-			data.AccountAuthToken = types.StringValue(account["account_auth_token"].(string))
-			accountFound = true
+		cluster := item.(map[string]interface{})
+		if cluster["eks_arn"].(string) == data.EKSArn.ValueString() {
+			data.ID = types.StringValue(cluster["_id"].(string))
+			data.DisplayName = types.StringValue(cluster["display_name"].(string))
+			data.Status = types.StringValue(cluster["status"].(string))
+			data.CollectionToken = types.StringValue(cluster["collection_token"].(string))
+			data.CreationDate = types.StringValue(cluster["creation_date"].(string))
+			clusterFound = true
 		}
 	}
 
-	if !accountFound {
-		resp.Diagnostics.AddError("Resource not found", fmt.Sprintf("Unable to get account, account with cloud_account_id: %s not found in Stream.Security API and probably deleted manually."+
-			"Please remove the resource from the terraform state.", data.CloudAccountID.ValueString()))
+	if !clusterFound {
+		resp.Diagnostics.AddError("Resource not found", fmt.Sprintf("Unable to get EKS cluster, cluster with ARN: %s not found in Stream.Security API.", data.EKSArn.ValueString()))
 		return
 	}
 
@@ -225,19 +224,18 @@ func (r *EKSClusterResource) Update(ctx context.Context, req resource.UpdateRequ
 	}
 
 	// check if there was a change in display_name
-	if data.DisplayName != state.DisplayName || !utils.EqualListValues(data.CloudRegions, state.CloudRegions) {
+	if data.DisplayName != state.DisplayName {
 		query := `
-			mutation UpdateAccount($id: ID!, $account: AccountUpdateInput) {
-				updateAccount(id: $id, account: $account) {
+			mutation UpdateKubernetes($id: ID!, $kubernetes: EditKubernetesInput) {
+				updateKubernetes(id: $id, kubernetes: $kubernetes) {
 					_id
 				}
 			}`
 
 		variables := map[string]interface{}{
 			"id": data.ID.ValueString(),
-			"account": map[string]interface{}{
-				"cloud_regions": utils.ConvertToStringSlice(data.CloudRegions.Elements()),
-				"display_name":  data.DisplayName.ValueString()}}
+			"kubernetes": map[string]interface{}{
+				"display_name": data.DisplayName.ValueString()}}
 
 		tflog.Debug(ctx, fmt.Sprintf("variables: %v", variables))
 
@@ -265,8 +263,8 @@ func (r *EKSClusterResource) Delete(ctx context.Context, req resource.DeleteRequ
 	}
 
 	query := `
-		mutation DeleteAccount($id: ID!) {
-			deleteAccount(id: $id)
+		mutation DeleteKubernetes($id: ID!) {
+			deleteKubernetes(id: $id)
 		}`
 
 	variables := map[string]interface{}{
@@ -281,5 +279,5 @@ func (r *EKSClusterResource) Delete(ctx context.Context, req resource.DeleteRequ
 }
 
 func (r *EKSClusterResource) ImportState(ctx context.Context, req resource.ImportStateRequest, resp *resource.ImportStateResponse) {
-	resource.ImportStatePassthroughID(ctx, path.Root("id"), req, resp)
+	resource.ImportStatePassthroughID(ctx, path.Root("eks_arn"), req, resp)
 }

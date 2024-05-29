@@ -248,8 +248,7 @@ func (r *AWSAccountResource) Read(ctx context.Context, req resource.ReadRequest,
 	}
 
 	if !accountFound {
-		resp.Diagnostics.AddError("Resource not found", fmt.Sprintf("Unable to get account, account with cloud_account_id: %s not found in Stream.Security API and probably deleted manually."+
-			"Please remove the resource from the terraform state.", data.CloudAccountID.ValueString()))
+		resp.Diagnostics.AddError("Resource not found", fmt.Sprintf("Unable to get account, account with cloud_account_id: %s not found in Stream.Security API.", data.CloudAccountID.ValueString()))
 		return
 	}
 
@@ -325,5 +324,5 @@ func (r *AWSAccountResource) Delete(ctx context.Context, req resource.DeleteRequ
 }
 
 func (r *AWSAccountResource) ImportState(ctx context.Context, req resource.ImportStateRequest, resp *resource.ImportStateResponse) {
-	resource.ImportStatePassthroughID(ctx, path.Root("id"), req, resp)
+	resource.ImportStatePassthroughID(ctx, path.Root("cloud_account_id"), req, resp)
 }
