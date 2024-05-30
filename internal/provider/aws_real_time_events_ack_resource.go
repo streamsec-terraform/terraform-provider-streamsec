@@ -1,8 +1,11 @@
 package provider
 
 import (
+	"bytes"
 	"context"
+	"encoding/json"
 	"fmt"
+	"net/http"
 	"regexp"
 	"terraform-provider-streamsec/internal/client"
 
@@ -18,31 +21,37 @@ import (
 )
 
 // Ensure provider defined types fully satisfy framework interfaces.
-var _ resource.Resource = &AWSAccountAckResource{}
-var _ resource.ResourceWithImportState = &AWSAccountAckResource{}
+var _ resource.Resource = &AWSRealTimeEventsAckResource{}
+var _ resource.ResourceWithImportState = &AWSRealTimeEventsAckResource{}
 
-func NewAWSAccountAckResource() resource.Resource {
-	return &AWSAccountAckResource{}
+func NewAWSRealTimeEventsAckResource() resource.Resource {
+	return &AWSRealTimeEventsAckResource{}
 }
 
-type AWSAccountAckResource struct {
+type CFTEventRequestBody struct {
+	AccountId       string `json:"AccountId"`
+	Region          string `json:"Region"`
+	TemplateVersion string `json:"TemplateVersion"`
+	Operaion        string `json:"operation"`
+}
+
+type AWSRealTimeEventsAckResource struct {
 	client *client.Client
 }
-type AWSAccountAckResourceModel struct {
+type AWSRealTimeEventsAckResourceModel struct {
 	ID             types.String `tfsdk:"id"`
-	RoleARN        types.String `tfsdk:"role_arn"`
 	CloudAccountID types.String `tfsdk:"cloud_account_id"`
-	StackRegion    types.String `tfsdk:"stack_region"`
+	Region         types.String `tfsdk:"region"`
 }
 
-func (r *AWSAccountAckResource) Metadata(ctx context.Context, req resource.MetadataRequest, resp *resource.MetadataResponse) {
-	resp.TypeName = req.ProviderTypeName + "_aws_account_ack"
+func (r *AWSRealTimeEventsAckResource) Metadata(ctx context.Context, req resource.MetadataRequest, resp *resource.MetadataResponse) {
+	resp.TypeName = req.ProviderTypeName + "_aws_real_time_events_ack"
 }
 
-func (r *AWSAccountAckResource) Schema(ctx context.Context, req resource.SchemaRequest, resp *resource.SchemaResponse) {
+func (r *AWSRealTimeEventsAckResource) Schema(ctx context.Context, req resource.SchemaRequest, resp *resource.SchemaResponse) {
 	resp.Schema = schema.Schema{
 		// This description is used by the documentation generator and the language server.
-		MarkdownDescription: "AWSAccountAck resource",
+		MarkdownDescription: "AWSRealTimeEventsAck resource",
 
 		Attributes: map[string]schema.Attribute{
 			"id": schema.StringAttribute{
@@ -52,8 +61,8 @@ func (r *AWSAccountAckResource) Schema(ctx context.Context, req resource.SchemaR
 					stringplanmodifier.UseStateForUnknown(),
 				},
 			},
-			"role_arn": schema.StringAttribute{
-				Description: "The role that gives permissions to Stream.Security.",
+			"region": schema.StringAttribute{
+				Description: "The region to ack.",
 				Required:    true,
 			},
 			"cloud_account_id": schema.StringAttribute{
@@ -67,15 +76,11 @@ func (r *AWSAccountAckResource) Schema(ctx context.Context, req resource.SchemaR
 					stringvalidator.RegexMatches(regexp.MustCompile(`^(\d{12})$`), "The cloud account ID must be a 12-digit number."),
 				},
 			},
-			"stack_region": schema.StringAttribute{
-				Description: "The stack region.",
-				Required:    true,
-			},
 		},
 	}
 }
 
-func (r *AWSAccountAckResource) Configure(ctx context.Context, req resource.ConfigureRequest, resp *resource.ConfigureResponse) {
+func (r *AWSRealTimeEventsAckResource) Configure(ctx context.Context, req resource.ConfigureRequest, resp *resource.ConfigureResponse) {
 	// Prevent panic if the provider has not been configured.
 	if req.ProviderData == nil {
 		return
@@ -94,8 +99,8 @@ func (r *AWSAccountAckResource) Configure(ctx context.Context, req resource.Conf
 	r.client = client
 }
 
-func (r *AWSAccountAckResource) Create(ctx context.Context, req resource.CreateRequest, resp *resource.CreateResponse) {
-	var data AWSAccountAckResourceModel
+func (r *AWSRealTimeEventsAckResource) Create(ctx context.Context, req resource.CreateRequest, resp *resource.CreateResponse) {
+	var data AWSRealTimeEventsAckResourceModel
 
 	// Read Terraform plan data into the model
 	resp.Diagnostics.Append(req.Plan.Get(ctx, &data)...)
@@ -129,7 +134,7 @@ func (r *AWSAccountAckResource) Create(ctx context.Context, req resource.CreateR
 
 	accounts := res["accounts"].([]interface{})
 	accountFound := false
-	account_auth_token := ""
+	streamsec_auth_token := ""
 
 	for _, acc := range accounts {
 
@@ -137,7 +142,7 @@ func (r *AWSAccountAckResource) Create(ctx context.Context, req resource.CreateR
 		if account["cloud_account_id"].(string) == data.CloudAccountID.ValueString() {
 			data.ID = types.StringValue(account["_id"].(string))
 			accountFound = true
-			account_auth_token = account["account_auth_token"].(string)
+			streamsec_auth_token = account["lightlytics_collection_token"].(string)
 		}
 	}
 
@@ -147,32 +152,42 @@ func (r *AWSAccountAckResource) Create(ctx context.Context, req resource.CreateR
 	}
 
 	tflog.Info(ctx, fmt.Sprintf("Account found: %v", data))
-	tflog.Info(ctx, fmt.Sprintf("Account auth token: %v", account_auth_token))
+	tflog.Info(ctx, fmt.Sprintf("Account auth token: %v", streamsec_auth_token))
 
-	query = `
-		mutation AccountAcknowledge($input: AccountAckInput){
-        accountAcknowledge(account: $input)
-    }`
-
-	variables := map[string]interface{}{
-		"input": map[string]interface{}{
-			"lightlytics_internal_account_id": data.ID.ValueString(),
-			"role_arn":                        data.RoleARN.ValueString(),
-			"account_type":                    "AWS",
-			"account_aliases":                 "",
-			"cloud_account_id":                data.CloudAccountID.ValueString(),
-			"stack_region":                    data.StackRegion.ValueString(),
-			"stack_id":                        "",
-			"init_stack_version":              1,
-		},
+	body := CFTEventRequestBody{
+		AccountId:       data.CloudAccountID.ValueString(),
+		Region:          data.Region.ValueString(),
+		TemplateVersion: "1",
+		Operaion:        "Create",
 	}
 
-	tflog.Debug(ctx, fmt.Sprintf("variables: %v", variables))
+	jsonData, err := json.Marshal(body)
+	if err != nil {
+		fmt.Printf("Error marshalling JSON: %s\n", err)
+		return
+	}
 
-	res, err = r.client.DoRequestWithToken(query, variables, account_auth_token)
+	url := fmt.Sprintf("https://%s/api/v1/collection/cloudtrail/cft-event", r.client.Host)
+
+	ackReq, err := http.NewRequest("POST", url, bytes.NewBuffer(jsonData))
+	ackReq.Header.Set("X-Lightlytics-Token", streamsec_auth_token)
+
+	tflog.Debug(ctx, fmt.Sprintf("Request: %v", ackReq))
 
 	if err != nil {
-		resp.Diagnostics.AddError("Client Error", fmt.Sprintf("Unable to send account acknowledge, got error: %s", err))
+		resp.Diagnostics.AddError("Client Error", fmt.Sprintf("Unable to ack region, got error: %s", err))
+		return
+	}
+
+	ack, err := http.DefaultClient.Do(ackReq)
+
+	if err != nil {
+		resp.Diagnostics.AddError("Client Error", fmt.Sprintf("Unable to ack region, got error: %s", err))
+		return
+	}
+
+	if ack.StatusCode != 200 {
+		resp.Diagnostics.AddError("Client Error", fmt.Sprintf("Unable to create account, got error: %s", ack.Status))
 		return
 	}
 
@@ -186,8 +201,8 @@ func (r *AWSAccountAckResource) Create(ctx context.Context, req resource.CreateR
 	resp.Diagnostics.Append(resp.State.Set(ctx, &data)...)
 }
 
-func (r *AWSAccountAckResource) Read(ctx context.Context, req resource.ReadRequest, resp *resource.ReadResponse) {
-	var data AWSAccountAckResourceModel
+func (r *AWSRealTimeEventsAckResource) Read(ctx context.Context, req resource.ReadRequest, resp *resource.ReadResponse) {
+	var data AWSRealTimeEventsAckResourceModel
 
 	// Read Terraform prior state data into the model
 	resp.Diagnostics.Append(req.State.Get(ctx, &data)...)
@@ -204,12 +219,10 @@ func (r *AWSAccountAckResource) Read(ctx context.Context, req resource.ReadReque
 				cloud_account_id
 				display_name
 				cloud_regions
-				stack_region
 				template_url
 				external_id
 				lightlytics_collection_token
 				account_auth_token
-				role_arn
 			}
 		}`
 
@@ -229,8 +242,6 @@ func (r *AWSAccountAckResource) Read(ctx context.Context, req resource.ReadReque
 		if account["cloud_account_id"].(string) == data.CloudAccountID.ValueString() {
 			data.ID = types.StringValue(account["_id"].(string))
 			data.CloudAccountID = types.StringValue(account["cloud_account_id"].(string))
-			data.StackRegion = types.StringValue(account["stack_region"].(string))
-			data.RoleARN = types.StringValue(account["role_arn"].(string))
 			accountFound = true
 		}
 	}
@@ -243,9 +254,9 @@ func (r *AWSAccountAckResource) Read(ctx context.Context, req resource.ReadReque
 	resp.Diagnostics.Append(resp.State.Set(ctx, &data)...)
 }
 
-func (r *AWSAccountAckResource) Update(ctx context.Context, req resource.UpdateRequest, resp *resource.UpdateResponse) {
-	var data AWSAccountAckResourceModel
-	var state AWSAccountAckResourceModel
+func (r *AWSRealTimeEventsAckResource) Update(ctx context.Context, req resource.UpdateRequest, resp *resource.UpdateResponse) {
+	var data AWSRealTimeEventsAckResourceModel
+	var state AWSRealTimeEventsAckResourceModel
 
 	// Read Terraform plan data into the model
 	resp.Diagnostics.Append(req.Plan.Get(ctx, &data)...)
@@ -259,8 +270,8 @@ func (r *AWSAccountAckResource) Update(ctx context.Context, req resource.UpdateR
 	resp.Diagnostics.Append(resp.State.Set(ctx, &data)...)
 }
 
-func (r *AWSAccountAckResource) Delete(ctx context.Context, req resource.DeleteRequest, resp *resource.DeleteResponse) {
-	var data AWSAccountAckResourceModel
+func (r *AWSRealTimeEventsAckResource) Delete(ctx context.Context, req resource.DeleteRequest, resp *resource.DeleteResponse) {
+	var data AWSRealTimeEventsAckResourceModel
 
 	// Read Terraform prior state data into the model
 	resp.Diagnostics.Append(req.State.Get(ctx, &data)...)
@@ -270,6 +281,6 @@ func (r *AWSAccountAckResource) Delete(ctx context.Context, req resource.DeleteR
 	}
 }
 
-func (r *AWSAccountAckResource) ImportState(ctx context.Context, req resource.ImportStateRequest, resp *resource.ImportStateResponse) {
+func (r *AWSRealTimeEventsAckResource) ImportState(ctx context.Context, req resource.ImportStateRequest, resp *resource.ImportStateResponse) {
 	resource.ImportStatePassthroughID(ctx, path.Root("cloud_account_id"), req, resp)
 }

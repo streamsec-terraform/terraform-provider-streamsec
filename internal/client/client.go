@@ -12,12 +12,14 @@ type Client struct {
 	graphqlClient *graphql.Client
 	Token         string
 	Workspace     string
+	Host          string
 }
 
 func NewClient(host, username, password, workspace_id *string) (*Client, error) {
 
 	c := Client{
 		graphqlClient: graphql.NewClient(fmt.Sprintf("https://%s/graphql", *host)),
+		Host:          *host,
 	}
 
 	c.Token = ""
