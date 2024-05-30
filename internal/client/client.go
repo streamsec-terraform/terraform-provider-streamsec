@@ -17,7 +17,7 @@ type Client struct {
 func NewClient(host, username, password, workspace_id *string) (*Client, error) {
 
 	c := Client{
-		graphqlClient: graphql.NewClient(fmt.Sprintf("%s/graphql", *host)),
+		graphqlClient: graphql.NewClient(fmt.Sprintf("https://%s/graphql", *host)),
 	}
 
 	c.Token = ""
