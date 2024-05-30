@@ -172,7 +172,7 @@ func (r *AWSAccountAckResource) Create(ctx context.Context, req resource.CreateR
 	res, err = r.client.DoRequestWithToken(query, variables, account_auth_token)
 
 	if err != nil {
-		resp.Diagnostics.AddError("Client Error", fmt.Sprintf("Unable to create account, got error: %s", err))
+		resp.Diagnostics.AddError("Client Error", fmt.Sprintf("Unable to send account acknowledge, got error: %s", err))
 		return
 	}
 
