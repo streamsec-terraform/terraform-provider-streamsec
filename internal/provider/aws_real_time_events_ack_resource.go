@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"net/http"
 	"regexp"
+	"strings"
 	"terraform-provider-streamsec/internal/client"
 
 	"github.com/hashicorp/terraform-plugin-framework-validators/stringvalidator"
@@ -39,9 +40,10 @@ type AWSRealTimeEventsAckResource struct {
 	client *client.Client
 }
 type AWSRealTimeEventsAckResourceModel struct {
-	ID             types.String `tfsdk:"id"`
-	CloudAccountID types.String `tfsdk:"cloud_account_id"`
-	Region         types.String `tfsdk:"region"`
+	ID                       types.String `tfsdk:"id"`
+	CloudAccountID           types.String `tfsdk:"cloud_account_id"`
+	Region                   types.String `tfsdk:"region"`
+	StreamsecCollectionToken types.String `tfsdk:"streamsec_collection_token"`
 }
 
 func (r *AWSRealTimeEventsAckResource) Metadata(ctx context.Context, req resource.MetadataRequest, resp *resource.MetadataResponse) {
@@ -64,6 +66,9 @@ func (r *AWSRealTimeEventsAckResource) Schema(ctx context.Context, req resource.
 			"region": schema.StringAttribute{
 				Description: "The region to ack.",
 				Required:    true,
+				PlanModifiers: []planmodifier.String{
+					stringplanmodifier.RequiresReplace(),
+				},
 			},
 			"cloud_account_id": schema.StringAttribute{
 				Description: "The cloud account ID.",
@@ -74,6 +79,13 @@ func (r *AWSRealTimeEventsAckResource) Schema(ctx context.Context, req resource.
 				// add validator to check if the cloud_account_id is a valid AWS account ID
 				Validators: []validator.String{
 					stringvalidator.RegexMatches(regexp.MustCompile(`^(\d{12})$`), "The cloud account ID must be a 12-digit number."),
+				},
+			},
+			"streamsec_collection_token": schema.StringAttribute{
+				Description: "The collection token.",
+				Computed:    true,
+				PlanModifiers: []planmodifier.String{
+					stringplanmodifier.UseStateForUnknown(),
 				},
 			},
 		},
@@ -122,6 +134,9 @@ func (r *AWSRealTimeEventsAckResource) Create(ctx context.Context, req resource.
 				external_id
 				lightlytics_collection_token
 				account_auth_token
+				realtime_regions {
+					region_name
+				}
 			}
 		}`
 
@@ -134,15 +149,23 @@ func (r *AWSRealTimeEventsAckResource) Create(ctx context.Context, req resource.
 
 	accounts := res["accounts"].([]interface{})
 	accountFound := false
-	streamsec_auth_token := ""
 
 	for _, acc := range accounts {
 
 		account := acc.(map[string]interface{})
 		if account["cloud_account_id"].(string) == data.CloudAccountID.ValueString() {
+			if account["realtime_regions"] != nil {
+				regions := account["realtime_regions"].([]interface{})
+				for _, region := range regions {
+					if region.(map[string]interface{})["region_name"].(string) == data.Region.ValueString() {
+						resp.Diagnostics.AddError("Region already exists", "The specified region is already enabled for real-time events. Please import using terraform import.")
+						return
+					}
+				}
+			}
 			data.ID = types.StringValue(account["_id"].(string))
+			data.StreamsecCollectionToken = types.StringValue(account["lightlytics_collection_token"].(string))
 			accountFound = true
-			streamsec_auth_token = account["lightlytics_collection_token"].(string)
 		}
 	}
 
@@ -150,9 +173,6 @@ func (r *AWSRealTimeEventsAckResource) Create(ctx context.Context, req resource.
 		resp.Diagnostics.AddError("Resource not found", fmt.Sprintf("Unable to get account, account with cloud_account_id: %s not found in Stream.Security API.", data.CloudAccountID.ValueString()))
 		return
 	}
-
-	tflog.Info(ctx, fmt.Sprintf("Account found: %v", data))
-	tflog.Info(ctx, fmt.Sprintf("Account auth token: %v", streamsec_auth_token))
 
 	body := CFTEventRequestBody{
 		AccountId:       data.CloudAccountID.ValueString(),
@@ -170,7 +190,7 @@ func (r *AWSRealTimeEventsAckResource) Create(ctx context.Context, req resource.
 	url := fmt.Sprintf("https://%s/api/v1/collection/cloudtrail/cft-event", r.client.Host)
 
 	ackReq, err := http.NewRequest("POST", url, bytes.NewBuffer(jsonData))
-	ackReq.Header.Set("X-Lightlytics-Token", streamsec_auth_token)
+	ackReq.Header.Set("X-Lightlytics-Token", data.StreamsecCollectionToken.ValueString())
 
 	tflog.Debug(ctx, fmt.Sprintf("Request: %v", ackReq))
 
@@ -223,6 +243,9 @@ func (r *AWSRealTimeEventsAckResource) Read(ctx context.Context, req resource.Re
 				external_id
 				lightlytics_collection_token
 				account_auth_token
+				realtime_regions {
+					region_name
+				}
 			}
 		}`
 
@@ -235,13 +258,27 @@ func (r *AWSRealTimeEventsAckResource) Read(ctx context.Context, req resource.Re
 
 	accounts := res["accounts"].([]interface{})
 	accountFound := false
+	regionFound := false
 
 	for _, acc := range accounts {
 
 		account := acc.(map[string]interface{})
 		if account["cloud_account_id"].(string) == data.CloudAccountID.ValueString() {
+			if account["realtime_regions"] != nil {
+				regions := account["realtime_regions"].([]interface{})
+				tflog.Debug(ctx, fmt.Sprintf("Regions: %v", regions))
+				for _, region := range regions {
+					if region.(map[string]interface{})["region_name"].(string) == data.Region.ValueString() {
+						regionFound = true
+					}
+				}
+			}
+			if !regionFound {
+				resp.Diagnostics.AddError("Region not found", "Unable to find the specified region in account enabled real-time regions")
+				return
+			}
 			data.ID = types.StringValue(account["_id"].(string))
-			data.CloudAccountID = types.StringValue(account["cloud_account_id"].(string))
+			data.StreamsecCollectionToken = types.StringValue(account["lightlytics_collection_token"].(string))
 			accountFound = true
 		}
 	}
@@ -279,8 +316,55 @@ func (r *AWSRealTimeEventsAckResource) Delete(ctx context.Context, req resource.
 	if resp.Diagnostics.HasError() {
 		return
 	}
+
+	body := CFTEventRequestBody{
+		AccountId:       data.CloudAccountID.ValueString(),
+		Region:          data.Region.ValueString(),
+		TemplateVersion: "1",
+		Operaion:        "Delete",
+	}
+
+	jsonData, err := json.Marshal(body)
+	if err != nil {
+		fmt.Printf("Error marshalling JSON: %s\n", err)
+		return
+	}
+
+	url := fmt.Sprintf("https://%s/api/v1/collection/cloudtrail/cft-event", r.client.Host)
+
+	ackReq, err := http.NewRequest("POST", url, bytes.NewBuffer(jsonData))
+	ackReq.Header.Set("X-Lightlytics-Token", data.StreamsecCollectionToken.ValueString())
+
+	tflog.Debug(ctx, fmt.Sprintf("Request: %v", ackReq))
+
+	if err != nil {
+		resp.Diagnostics.AddError("Client Error", fmt.Sprintf("Unable to ack region, got error: %s", err))
+		return
+	}
+
+	ack, err := http.DefaultClient.Do(ackReq)
+
+	if err != nil {
+		resp.Diagnostics.AddError("Client Error", fmt.Sprintf("Unable to ack region, got error: %s", err))
+		return
+	}
+
+	if ack.StatusCode != 200 {
+		resp.Diagnostics.AddError("Client Error", fmt.Sprintf("Unable to create account, got error: %s", ack.Status))
+		return
+	}
 }
 
 func (r *AWSRealTimeEventsAckResource) ImportState(ctx context.Context, req resource.ImportStateRequest, resp *resource.ImportStateResponse) {
-	resource.ImportStatePassthroughID(ctx, path.Root("cloud_account_id"), req, resp)
+	idParts := strings.Split(req.ID, ",")
+	if len(idParts) != 2 || idParts[0] == "" || idParts[1] == "" {
+		resp.Diagnostics.AddError(
+			"Unexpected Import Identifier",
+			fmt.Sprintf("Expected import identifier with format: account_id,region. Got: %q", req.ID),
+		)
+		return
+	}
+
+	resp.Diagnostics.Append(resp.State.SetAttribute(ctx, path.Root("cloud_account_id"), idParts[0])...)
+	resp.Diagnostics.Append(resp.State.SetAttribute(ctx, path.Root("region"), idParts[1])...)
 }
