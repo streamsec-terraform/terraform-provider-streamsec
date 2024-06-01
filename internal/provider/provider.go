@@ -194,7 +194,9 @@ func (p *StreamsecProvider) Resources(ctx context.Context) []func() resource.Res
 }
 
 func (p *StreamsecProvider) DataSources(ctx context.Context) []func() datasource.DataSource {
-	return []func() datasource.DataSource{}
+	return []func() datasource.DataSource{
+		NewHostDataSource,
+	}
 }
 
 func (p *StreamsecProvider) Functions(ctx context.Context) []func() function.Function {
