@@ -190,6 +190,7 @@ func (p *StreamsecProvider) Resources(ctx context.Context) []func() resource.Res
 		NewAWSKubernetesClusterResource,
 		NewAWSAccountAckResource,
 		NewAWSRealTimeEventsAckResource,
+		NewAWSCostAckResource,
 	}
 }
 
