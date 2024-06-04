@@ -12,12 +12,13 @@ These files contain boilerplate code that you will need to edit to create your o
 
 Please see the [GitHub template repository documentation](https://help.github.com/en/github/creating-cloning-and-archiving-repositories/creating-a-repository-from-a-template) for how to create a new repository from this template on GitHub.
 
-Once you've written your provider, you'll want to [publish it on the Terraform Registry](https://developer.hashicorp.com/terraform/registry/providers/publishing) so that others can use it.
+Stream Security Official Documentation : [Link](https://docs.streamsec.io/docs/connection-via-terraform)
 
 ## Requirements
 
 - [Terraform](https://developer.hashicorp.com/terraform/downloads) >= 1.0
 - [Go](https://golang.org/doc/install) >= 1.21
+- [StreamSec Account](https://app.streamsec.io/signup)
 
 ## Building The Provider
 
