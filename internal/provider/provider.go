@@ -191,6 +191,7 @@ func (p *StreamsecProvider) Resources(ctx context.Context) []func() resource.Res
 		NewAWSAccountAckResource,
 		NewAWSRealTimeEventsAckResource,
 		NewAWSCostAckResource,
+		NewAzureTenantResource,
 	}
 }
 
