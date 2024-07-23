@@ -29,7 +29,7 @@ type AzureTenantDataSource struct {
 // AzureTenantDataSourceModel describes the data source data model.
 type AzureTenantDataSourceModel struct {
 	ID             types.String `tfsdk:"id"`
-	CloudAccountID types.String `tfsdk:"cloud_account_id"`
+	CloudAccountID types.String `tfsdk:"tenant_id"`
 	DisplayName    types.String `tfsdk:"display_name"`
 	TemplateURL    types.String `tfsdk:"template_url"`
 	AccountToken   types.String `tfsdk:"account_token"`
@@ -49,7 +49,7 @@ func (d *AzureTenantDataSource) Schema(ctx context.Context, req datasource.Schem
 				MarkdownDescription: "The internal ID of the account.",
 				Required:            true,
 			},
-			"cloud_account_id": schema.StringAttribute{
+			"tenant_id": schema.StringAttribute{
 				MarkdownDescription: "azure tenant id",
 				Computed:            true,
 			},
