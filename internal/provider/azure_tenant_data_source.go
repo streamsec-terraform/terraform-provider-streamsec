@@ -47,11 +47,11 @@ func (d *AzureTenantDataSource) Schema(ctx context.Context, req datasource.Schem
 		Attributes: map[string]schema.Attribute{
 			"id": schema.StringAttribute{
 				MarkdownDescription: "The internal ID of the account.",
-				Required:            true,
+				Computed:            true,
 			},
 			"tenant_id": schema.StringAttribute{
 				MarkdownDescription: "azure tenant id",
-				Computed:            true,
+				Required:            true,
 			},
 			"display_name": schema.StringAttribute{
 				MarkdownDescription: "The display name of the tenant.",
@@ -125,15 +125,17 @@ func (d *AzureTenantDataSource) Read(ctx context.Context, req datasource.ReadReq
 	accounts := res["accounts"].([]interface{})
 	accountFound := false
 
+	tflog.Debug(ctx, fmt.Sprintf("accounts: %v", accounts))
+
 	for _, acc := range accounts {
 
 		account := acc.(map[string]interface{})
-		if account["_id"].(string) == data.ID.ValueString() {
+		if account["cloud_account_id"] != nil && account["cloud_account_id"].(string) == data.CloudAccountID.ValueString() {
 			if account["status"].(string) == "DELETING" {
 				resp.Diagnostics.AddError("Resource status is DELETING", fmt.Sprintf("Azure tenant with id: %s is being deleted.", data.CloudAccountID.ValueString()))
 				return
 			}
-			data.CloudAccountID = types.StringValue(account["cloud_account_id"].(string))
+			data.ID = types.StringValue(account["_id"].(string))
 			data.DisplayName = types.StringValue(account["display_name"].(string))
 			data.TemplateURL = types.StringValue(account["template_url"].(string))
 			data.AccountToken = types.StringValue(account["account_token"].(string))
