@@ -7,10 +7,13 @@ import (
 	"fmt"
 	"net/http"
 	"regexp"
+	"strings"
 	"terraform-provider-streamsec/internal/client"
 	"terraform-provider-streamsec/internal/utils"
 
+	"github.com/hashicorp/terraform-plugin-framework-validators/listvalidator"
 	"github.com/hashicorp/terraform-plugin-framework-validators/stringvalidator"
+	"github.com/hashicorp/terraform-plugin-framework/attr"
 	"github.com/hashicorp/terraform-plugin-framework/path"
 	"github.com/hashicorp/terraform-plugin-framework/resource"
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema"
@@ -42,11 +45,11 @@ type AzureTenantAckResourceModel struct {
 }
 
 type AzureAckRequestBody struct {
-	AccountType   string   `json:"account_type"`
-	TenantID      string   `json:"tenant_id"`
-	ClientID      string   `json:"client_id"`
-	ClientSecret  string   `json:"client_secret"`
-	Subscriptions []string `json:"subscriptions"`
+	AccountType   string `json:"account_type"`
+	TenantID      string `json:"tenant_id"`
+	ClientID      string `json:"client_id"`
+	ClientSecret  string `json:"client_secret"`
+	Subscriptions string `json:"subscriptions"`
 }
 
 func (r *AzureTenantAckResource) Metadata(ctx context.Context, req resource.MetadataRequest, resp *resource.MetadataResponse) {
@@ -86,6 +89,13 @@ func (r *AzureTenantAckResource) Schema(ctx context.Context, req resource.Schema
 				ElementType: types.StringType,
 				Description: "The subscriptions integrated",
 				Required:    true,
+				Validators: []validator.List{
+					listvalidator.All(
+						listvalidator.ValueStringsAre(
+							stringvalidator.RegexMatches(regexp.MustCompile(`^[0-9a-z-]{36}$`), "Subscription ID must be a 36-character string with lowercase letters, numbers, and hyphens."),
+						),
+					),
+				},
 			},
 			"account_token": schema.StringAttribute{
 				Description: "The collection token.",
@@ -174,7 +184,7 @@ func (r *AzureTenantAckResource) Create(ctx context.Context, req resource.Create
 		TenantID:      data.CloudAccountID.ValueString(),
 		ClientID:      data.ClientID.ValueString(),
 		ClientSecret:  data.ClientSecret.ValueString(),
-		Subscriptions: []string{},
+		Subscriptions: strings.Join(utils.ConvertToStringSlice(data.Subscriptions.Elements()), ","),
 	}
 
 	jsonData, err := json.Marshal(body)
@@ -233,8 +243,9 @@ func (r *AzureTenantAckResource) Read(ctx context.Context, req resource.ReadRequ
 				_id
 				cloud_account_id
 				client_id
-				client_secret
-				subscriptions
+				subscriptions {
+					id
+				}
 				account_token
 			}
 		}`
@@ -253,11 +264,17 @@ func (r *AzureTenantAckResource) Read(ctx context.Context, req resource.ReadRequ
 
 		account := acc.(map[string]interface{})
 		if account["_id"].(string) == data.ID.ValueString() {
-			data.ID = types.StringValue(account["_id"].(string))
-			data.CloudAccountID = types.StringValue(account["cloud_account_id"].(string))
-			data.ClientID = types.StringValue(account["client_id"].(string))
-			data.ClientSecret = types.StringValue(account["client_secret"].(string))
-			data.Subscriptions = utils.ConvertInterfaceToTypesList(account["subscriptions"].([]interface{}))
+			if account["subscriptions"] != nil {
+				subscriptions := account["subscriptions"].([]interface{})
+				// create a list of subscription IDs
+				var subscriptionIDs []string
+				for _, sub := range subscriptions {
+					subscriptionIDs = append(subscriptionIDs, sub.(map[string]interface{})["id"].(string))
+				}
+				data.Subscriptions = utils.ConvertStringsArrayToTypesList(subscriptionIDs)
+			} else {
+				data.Subscriptions = types.ListValueMust(types.StringType, []attr.Value{})
+			}
 			data.AccountToken = types.StringValue(account["account_token"].(string))
 
 			accountFound = true
@@ -282,6 +299,33 @@ func (r *AzureTenantAckResource) Update(ctx context.Context, req resource.Update
 
 	if resp.Diagnostics.HasError() {
 		return
+	}
+
+	// check if there was a change in display_name
+	if !utils.EqualListValues(data.Subscriptions, state.Subscriptions) {
+		query := `
+			mutation UpdateAccount($id: ID!, $account: AccountUpdateInput) {
+				updateAccount(id: $id, account: $account) {
+					_id
+				}
+			}`
+
+		variables := map[string]interface{}{
+			"id": data.ID.ValueString(),
+			"account": map[string]interface{}{
+				"subscriptions": utils.ConvertToStringSlice(data.Subscriptions.Elements()),
+			},
+		}
+
+		tflog.Debug(ctx, fmt.Sprintf("variables: %v", variables))
+
+		_, err := r.client.DoRequest(query, variables)
+
+		if err != nil {
+			resp.Diagnostics.AddError("Client Error", fmt.Sprintf("Unable to update account, got error: %s", err))
+			return
+		}
+
 	}
 
 	// Save updated data into Terraform state

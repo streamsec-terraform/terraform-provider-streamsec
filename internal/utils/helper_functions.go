@@ -43,3 +43,18 @@ func ConvertInterfaceToTypesList(values []interface{}) types.List {
 
 	return list
 }
+
+func ConvertStringsArrayToTypesList(values []string) types.List {
+	// Create a slice to hold the types.Value elements
+	elements := make([]attr.Value, len(values))
+
+	// Iterate over the Go slice and convert each string to types.String
+	for i, s := range values {
+		elements[i] = types.StringValue(s)
+	}
+
+	// Create the types.List with the elements
+	list := types.ListValueMust(types.StringType, elements)
+
+	return list
+}
