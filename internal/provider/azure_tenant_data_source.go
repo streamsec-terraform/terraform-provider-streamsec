@@ -6,10 +6,13 @@ package provider
 import (
 	"context"
 	"fmt"
+	"regexp"
 	"terraform-provider-streamsec/internal/client"
 
+	"github.com/hashicorp/terraform-plugin-framework-validators/stringvalidator"
 	"github.com/hashicorp/terraform-plugin-framework/datasource"
 	"github.com/hashicorp/terraform-plugin-framework/datasource/schema"
+	"github.com/hashicorp/terraform-plugin-framework/schema/validator"
 	"github.com/hashicorp/terraform-plugin-framework/types"
 	"github.com/hashicorp/terraform-plugin-log/tflog"
 )
@@ -50,8 +53,11 @@ func (d *AzureTenantDataSource) Schema(ctx context.Context, req datasource.Schem
 				Computed:            true,
 			},
 			"tenant_id": schema.StringAttribute{
-				MarkdownDescription: "azure tenant id",
+				MarkdownDescription: "The Azure tenant ID.",
 				Required:            true,
+				Validators: []validator.String{
+					stringvalidator.RegexMatches(regexp.MustCompile(`^[0-9a-z-]{36}$`), "Azure tenant ID must be a 36-character string with lowercase letters, numbers, and hyphens."),
+				},
 			},
 			"display_name": schema.StringAttribute{
 				MarkdownDescription: "The display name of the tenant.",
@@ -130,7 +136,7 @@ func (d *AzureTenantDataSource) Read(ctx context.Context, req datasource.ReadReq
 	for _, acc := range accounts {
 
 		account := acc.(map[string]interface{})
-		if account["cloud_account_id"] != nil && account["cloud_account_id"].(string) == data.CloudAccountID.ValueString() {
+		if account["cloud_account_id"].(string) == data.CloudAccountID.ValueString() {
 			if account["status"].(string) == "DELETING" {
 				resp.Diagnostics.AddError("Resource status is DELETING", fmt.Sprintf("Azure tenant with id: %s is being deleted.", data.CloudAccountID.ValueString()))
 				return

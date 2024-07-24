@@ -64,7 +64,10 @@ func (r *AzureTenantAckResource) Schema(ctx context.Context, req resource.Schema
 		Attributes: map[string]schema.Attribute{
 			"id": schema.StringAttribute{
 				Description: "The internal ID of the tenant.",
-				Required:    true,
+				Computed:    true,
+				PlanModifiers: []planmodifier.String{
+					stringplanmodifier.UseStateForUnknown(),
+				},
 			},
 			"tenant_id": schema.StringAttribute{
 				Description: "The Azure tenant ID.",
@@ -165,7 +168,7 @@ func (r *AzureTenantAckResource) Create(ctx context.Context, req resource.Create
 	for _, acc := range accounts {
 
 		account := acc.(map[string]interface{})
-		if account["_id"].(string) == data.ID.ValueString() {
+		if account["cloud_account_id"].(string) == data.CloudAccountID.ValueString() {
 			data.ID = types.StringValue(account["_id"].(string))
 			data.AccountToken = types.StringValue(account["account_token"].(string))
 			accountFound = true
@@ -263,7 +266,7 @@ func (r *AzureTenantAckResource) Read(ctx context.Context, req resource.ReadRequ
 	for _, acc := range accounts {
 
 		account := acc.(map[string]interface{})
-		if account["_id"].(string) == data.ID.ValueString() {
+		if account["cloud_account_id"].(string) == data.CloudAccountID.ValueString() {
 			if account["subscriptions"] != nil {
 				subscriptions := account["subscriptions"].([]interface{})
 				// create a list of subscription IDs
@@ -276,6 +279,7 @@ func (r *AzureTenantAckResource) Read(ctx context.Context, req resource.ReadRequ
 				data.Subscriptions = types.ListValueMust(types.StringType, []attr.Value{})
 			}
 			data.AccountToken = types.StringValue(account["account_token"].(string))
+			data.ID = types.StringValue(account["_id"].(string))
 
 			accountFound = true
 		}
@@ -302,7 +306,7 @@ func (r *AzureTenantAckResource) Update(ctx context.Context, req resource.Update
 	}
 
 	// check if there was a change in display_name
-	if !utils.EqualListValues(data.Subscriptions, state.Subscriptions) {
+	if !utils.EqualListValues(data.Subscriptions, state.Subscriptions) || data.ClientID != state.ClientID || data.ClientSecret != state.ClientSecret {
 		query := `
 			mutation UpdateAccount($id: ID!, $account: AccountUpdateInput) {
 				updateAccount(id: $id, account: $account) {
@@ -314,6 +318,8 @@ func (r *AzureTenantAckResource) Update(ctx context.Context, req resource.Update
 			"id": data.ID.ValueString(),
 			"account": map[string]interface{}{
 				"subscriptions": utils.ConvertToStringSlice(data.Subscriptions.Elements()),
+				"client_id":     data.ClientID.ValueString(),
+				"client_secret": data.ClientSecret.ValueString(),
 			},
 		}
 
@@ -344,5 +350,5 @@ func (r *AzureTenantAckResource) Delete(ctx context.Context, req resource.Delete
 }
 
 func (r *AzureTenantAckResource) ImportState(ctx context.Context, req resource.ImportStateRequest, resp *resource.ImportStateResponse) {
-	resource.ImportStatePassthroughID(ctx, path.Root("id"), req, resp)
+	resource.ImportStatePassthroughID(ctx, path.Root("tenant_id"), req, resp)
 }

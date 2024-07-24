@@ -26,10 +26,11 @@ type AzureTenantResource struct {
 	client *client.Client
 }
 type AzureTenantResourceModel struct {
-	ID           types.String `tfsdk:"id"`
-	DisplayName  types.String `tfsdk:"display_name"`
-	TemplateURL  types.String `tfsdk:"template_url"`
-	AccountToken types.String `tfsdk:"account_token"`
+	ID             types.String `tfsdk:"id"`
+	CloudAccountID types.String `tfsdk:"tenant_id"`
+	DisplayName    types.String `tfsdk:"display_name"`
+	TemplateURL    types.String `tfsdk:"template_url"`
+	AccountToken   types.String `tfsdk:"account_token"`
 }
 
 func (r *AzureTenantResource) Metadata(ctx context.Context, req resource.MetadataRequest, resp *resource.MetadataResponse) {
@@ -47,6 +48,13 @@ func (r *AzureTenantResource) Schema(ctx context.Context, req resource.SchemaReq
 				Computed:    true,
 				PlanModifiers: []planmodifier.String{
 					stringplanmodifier.UseStateForUnknown(),
+				},
+			},
+			"tenant_id": schema.StringAttribute{
+				Description: "The Azure tenant ID.",
+				Required:    true,
+				PlanModifiers: []planmodifier.String{
+					stringplanmodifier.RequiresReplace(),
 				},
 			},
 			"display_name": schema.StringAttribute{
@@ -101,10 +109,11 @@ func (r *AzureTenantResource) Create(ctx context.Context, req resource.CreateReq
 	}
 
 	query := `
-		mutation CreateAzurePortalAccount($account_type: CloudProvider!, $display_name: String!) {
+		mutation CreateAzurePortalAccount($account_type: CloudProvider!, $display_name: String!, $tenant_id: String!) {
 			createAccount(account: {
 				account_type: $account_type,
 				display_name: $display_name,
+				cloud_account_id: $tenant_id
 			  })
 			{
 				_id
@@ -117,6 +126,7 @@ func (r *AzureTenantResource) Create(ctx context.Context, req resource.CreateReq
 	variables := map[string]interface{}{
 		"account_type": "Azure",
 		"display_name": data.DisplayName.ValueString(),
+		"tenant_id":    data.CloudAccountID.ValueString(),
 	}
 
 	tflog.Debug(ctx, fmt.Sprintf("variables: %v", variables))
@@ -183,7 +193,7 @@ func (r *AzureTenantResource) Read(ctx context.Context, req resource.ReadRequest
 	for _, acc := range accounts {
 
 		account := acc.(map[string]interface{})
-		if account["_id"] == data.ID.ValueString() {
+		if account["cloud_account_id"] == data.CloudAccountID.ValueString() {
 			if account["status"].(string) == "DELETING" {
 				resp.Diagnostics.AddError("Resource status is DELETING", fmt.Sprintf("Azure tenant with id: %s is being deleted.", data.ID.ValueString()))
 				return
@@ -272,5 +282,5 @@ func (r *AzureTenantResource) Delete(ctx context.Context, req resource.DeleteReq
 }
 
 func (r *AzureTenantResource) ImportState(ctx context.Context, req resource.ImportStateRequest, resp *resource.ImportStateResponse) {
-	resource.ImportStatePassthroughID(ctx, path.Root("id"), req, resp)
+	resource.ImportStatePassthroughID(ctx, path.Root("tenant_id"), req, resp)
 }
