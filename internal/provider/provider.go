@@ -191,6 +191,8 @@ func (p *StreamsecProvider) Resources(ctx context.Context) []func() resource.Res
 		NewAWSAccountAckResource,
 		NewAWSRealTimeEventsAckResource,
 		NewAWSCostAckResource,
+		NewAzureTenantResource,
+		NewAzureTenantAckResource,
 	}
 }
 
@@ -198,6 +200,7 @@ func (p *StreamsecProvider) DataSources(ctx context.Context) []func() datasource
 	return []func() datasource.DataSource{
 		NewHostDataSource,
 		NewAWSAccountDataSource,
+		NewAzureTenantDataSource,
 	}
 }
 
