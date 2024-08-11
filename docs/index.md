@@ -14,10 +14,16 @@ description: |-
 
 ```terraform
 provider "streamsec" {
-  host = "app.streamsec.io"
-  username = "myuser"
-  password = "mypassword"
-  workspace_id = "123456123213213123"
+  ##########
+  Either api_token or username/password must be set
+  Priority is given to api_token
+  Priority is given to terraform variables over environment variables
+  ##########
+  host = "app.streamsec.io" # ENVIRONMENT VARIABLE: STREAMSEC_HOST
+  api_token = "xxxxxxx" # ENVIRONMENT VARIABLE: STREAMSEC_API_TOKEN
+  username = "myuser" # ENVIRONMENT VARIABLE: STREAMSEC_USERNAME
+  password = "mypassword" # ENVIRONMENT VARIABLE: STREAMSEC_PASSWORD
+  workspace_id = "123456123213213123" # ENVIRONMENT VARIABLE: STREAMSEC_WORKSPACE_ID
 }
 ```
 
@@ -27,6 +33,10 @@ provider "streamsec" {
 ### Required
 
 - `host` (String)
+
+### Optional
+
+- `api_token` (String, Sensitive)
 - `password` (String, Sensitive)
 - `username` (String)
 - `workspace_id` (String)
