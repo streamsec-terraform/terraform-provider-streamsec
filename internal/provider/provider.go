@@ -32,6 +32,7 @@ type StreamsecProvider struct {
 // StreamsecProviderModel describes the provider data model.
 type StreamsecProviderModel struct {
 	Host        types.String `tfsdk:"host"`
+	ApiToken    types.String `tfsdk:"api_token"`
 	Username    types.String `tfsdk:"username"`
 	Password    types.String `tfsdk:"password"`
 	WorkspaceId types.String `tfsdk:"workspace_id"`
@@ -48,15 +49,19 @@ func (p *StreamsecProvider) Schema(ctx context.Context, req provider.SchemaReque
 			"host": schema.StringAttribute{
 				Required: true,
 			},
+			"api_token": schema.StringAttribute{
+				Optional:  true,
+				Sensitive: true,
+			},
 			"username": schema.StringAttribute{
-				Required: true,
+				Optional: true,
 			},
 			"password": schema.StringAttribute{
-				Required:  true,
+				Optional:  true,
 				Sensitive: true,
 			},
 			"workspace_id": schema.StringAttribute{
-				Required: true,
+				Optional: true,
 			},
 		},
 	}
@@ -78,6 +83,14 @@ func (p *StreamsecProvider) Configure(ctx context.Context, req provider.Configur
 			"Unknown Stream.Security API Host",
 			"The provider cannot create the Stream.Security API client as there is an unknown configuration value for the Stream.Security API host. "+
 				"Either target apply the source of the value first, set the value statically in the configuration, or use the STREAMSEC_HOST environment variable.",
+		)
+	}
+	if config.ApiToken.IsUnknown() {
+		resp.Diagnostics.AddAttributeError(
+			path.Root("api_token"),
+			"Unknown Stream.Security API Token",
+			"The provider cannot create the Stream.Security API client as there is an unknown configuration value for the Stream.Security API token. "+
+				"Either target apply the source of the value first, set the value statically in the configuration, or use the STREAMSEC_API_TOKEN environment variable.",
 		)
 	}
 	if config.Username.IsUnknown() {
@@ -110,11 +123,15 @@ func (p *StreamsecProvider) Configure(ctx context.Context, req provider.Configur
 	// Default values to environment variables, but override
 	// with Terraform configuration value if set.
 	host := os.Getenv("STREAMSEC_HOST")
+	apiToken := os.Getenv("STREAMSEC_API_TOKEN")
 	username := os.Getenv("STREAMSEC_USERNAME")
 	password := os.Getenv("STREAMSEC_PASSWORD")
 	workspaceId := os.Getenv("STREAMSEC_WORKSPACE_ID")
 	if !config.Host.IsNull() {
 		host = config.Host.ValueString()
+	}
+	if !config.ApiToken.IsNull() {
+		apiToken = config.ApiToken.ValueString()
 	}
 	if !config.Username.IsNull() {
 		username = config.Username.ValueString()
@@ -137,28 +154,37 @@ func (p *StreamsecProvider) Configure(ctx context.Context, req provider.Configur
 				"If either is already set, ensure the value is not empty.",
 		)
 	}
-	if username == "" {
+	if apiToken == "" && username == "" && password == "" {
+		resp.Diagnostics.AddAttributeError(
+			path.Root("api_token"),
+			"Missing Stream.Security API Token or Username/Password",
+			"The provider cannot create the Stream.Security API client as there is a missing or empty value for the Stream.Security API token or username/password. "+
+				"Set the api_token value in the configuration or use the STREAMSEC_API_TOKEN environment variable. "+
+				"If either is already set, ensure the value is not empty.",
+		)
+	}
+	if username == "" && apiToken == "" {
 		resp.Diagnostics.AddAttributeError(
 			path.Root("username"),
-			"Missing Stream.Security API Username",
+			"Missing Stream.Security API Username or API Token",
 			"The provider cannot create the Stream.Security API client as there is a missing or empty value for the Stream.Security API username. "+
 				"Set the username value in the configuration or use the STREAMSEC_USERNAME environment variable. "+
 				"If either is already set, ensure the value is not empty.",
 		)
 	}
-	if password == "" {
+	if password == "" && apiToken == "" {
 		resp.Diagnostics.AddAttributeError(
 			path.Root("password"),
-			"Missing Stream.Security API Password",
+			"Missing Stream.Security API Password or API Token",
 			"The provider cannot create the Stream.Security API client as there is a missing or empty value for the Stream.Security API password. "+
 				"Set the password value in the configuration or use the STREAMSEC_PASSWORD environment variable. "+
 				"If either is already set, ensure the value is not empty.",
 		)
 	}
-	if workspaceId == "" {
+	if workspaceId == "" && apiToken == "" {
 		resp.Diagnostics.AddAttributeError(
 			path.Root("workspace_id"),
-			"Missing Stream.Security API Workspace ID",
+			"Missing Stream.Security API Workspace ID or API Token",
 			"The provider cannot create the Stream.Security API client as there is a missing or empty value for the Stream.Security API workspace ID. "+
 				"Set the workspace_id value in the configuration or use the STREAMSEC_WORKSPACE_ID environment variable. "+
 				"If either is already set, ensure the value is not empty.",
@@ -168,7 +194,7 @@ func (p *StreamsecProvider) Configure(ctx context.Context, req provider.Configur
 		return
 	}
 	// Create a new Stream.Security client using the configuration values
-	client, err := client.NewClient(&host, &username, &password, &workspaceId)
+	client, err := client.NewClient(&host, &username, &password, &workspaceId, &apiToken)
 	if err != nil {
 		resp.Diagnostics.AddError(
 			"Unable to Create Stream.Security API Client",

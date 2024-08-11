@@ -15,7 +15,7 @@ type Client struct {
 	Host          string
 }
 
-func NewClient(host, username, password, workspace_id *string) (*Client, error) {
+func NewClient(host, username, password, workspace_id *string, apiToken *string) (*Client, error) {
 
 	c := Client{
 		graphqlClient: graphql.NewClient(fmt.Sprintf("https://%s/graphql", *host)),
@@ -27,6 +27,10 @@ func NewClient(host, username, password, workspace_id *string) (*Client, error) 
 		c.Workspace = *workspace_id
 	}
 
+	if apiToken != nil && *apiToken != "" {
+		c.Token = *apiToken
+		return &c, nil
+	}
 	err := c.authenticate(username, password)
 
 	if err != nil {
