@@ -47,7 +47,7 @@ func (p *StreamsecProvider) Schema(ctx context.Context, req provider.SchemaReque
 	resp.Schema = schema.Schema{
 		Attributes: map[string]schema.Attribute{
 			"host": schema.StringAttribute{
-				Required: true,
+				Optional: true,
 			},
 			"api_token": schema.StringAttribute{
 				Optional:  true,
