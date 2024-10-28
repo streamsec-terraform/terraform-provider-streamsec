@@ -255,6 +255,78 @@ func (r *AWSAccountAckResource) Update(ctx context.Context, req resource.UpdateR
 		return
 	}
 
+	query := `
+		query {
+			accounts {
+				_id
+				account_type
+				cloud_account_id
+				display_name
+				cloud_regions
+				stack_region
+				template_url
+				external_id
+				lightlytics_collection_token
+				account_auth_token
+			}
+		}`
+
+	res, err := r.client.DoRequest(query, nil)
+
+	if err != nil {
+		resp.Diagnostics.AddError("Client Error", fmt.Sprintf("Unable to get account, got error: %s", err))
+		return
+	}
+
+	accounts := res["accounts"].([]interface{})
+	accountFound := false
+	account_auth_token := ""
+
+	for _, acc := range accounts {
+
+		account := acc.(map[string]interface{})
+		if account["cloud_account_id"].(string) == data.CloudAccountID.ValueString() {
+			data.ID = types.StringValue(account["_id"].(string))
+			accountFound = true
+			account_auth_token = account["account_auth_token"].(string)
+		}
+	}
+
+	if !accountFound {
+		resp.Diagnostics.AddError("Resource not found", fmt.Sprintf("Unable to get account, account with cloud_account_id: %s not found in Stream.Security API.", data.CloudAccountID.ValueString()))
+		return
+	}
+
+	tflog.Info(ctx, fmt.Sprintf("Account found: %v", data))
+	tflog.Info(ctx, fmt.Sprintf("Account auth token: %v", account_auth_token))
+
+	// check if there was a change in display_name
+	if data.RoleARN != state.RoleARN {
+		query := `
+			mutation accountUpdateAcknowledge($account: AccountUpdateAckInput) {
+				accountUpdateAcknowledge(account: $account)
+			}`
+
+		variables := map[string]interface{}{
+			"account": map[string]interface{}{
+				"lightlytics_internal_account_id": data.ID.ValueString(),
+				"account_type":                    "AWS",
+				"role_arn":                        data.RoleARN.ValueString(),
+				"init_stack_version":              1,
+			},
+		}
+
+		tflog.Debug(ctx, fmt.Sprintf("variables: %v", variables))
+
+		_, err := r.client.DoRequestWithToken(query, variables, account_auth_token)
+
+		if err != nil {
+			resp.Diagnostics.AddError("Client Error", fmt.Sprintf("Unable to update account, got error: %s", err))
+			return
+		}
+
+	}
+
 	// Save updated data into Terraform state
 	resp.Diagnostics.Append(resp.State.Set(ctx, &data)...)
 }
