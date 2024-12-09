@@ -53,7 +53,7 @@ func (r *GCPProjectResource) Schema(ctx context.Context, req resource.SchemaRequ
 				Description: "The display name of the account.",
 				Required:    true,
 			},
-			"cloud_account_id": schema.StringAttribute{
+			"project_id": schema.StringAttribute{
 				Description: "The GCP Project ID.",
 				Required:    true,
 				PlanModifiers: []planmodifier.String{
