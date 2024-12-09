@@ -219,6 +219,8 @@ func (p *StreamsecProvider) Resources(ctx context.Context) []func() resource.Res
 		NewAWSCostAckResource,
 		NewAzureTenantResource,
 		NewAzureTenantAckResource,
+		NewGCPProjectResource,
+		NewGCPProjectAckResource,
 	}
 }
 
@@ -227,6 +229,7 @@ func (p *StreamsecProvider) DataSources(ctx context.Context) []func() datasource
 		NewHostDataSource,
 		NewAWSAccountDataSource,
 		NewAzureTenantDataSource,
+		NewGCPProjectDataSource,
 	}
 }
 
