@@ -6,16 +6,13 @@ import (
 	"encoding/json"
 	"fmt"
 	"net/http"
-	"regexp"
 	"terraform-provider-streamsec/internal/client"
 
-	"github.com/hashicorp/terraform-plugin-framework-validators/stringvalidator"
 	"github.com/hashicorp/terraform-plugin-framework/path"
 	"github.com/hashicorp/terraform-plugin-framework/resource"
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema"
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema/planmodifier"
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema/stringplanmodifier"
-	"github.com/hashicorp/terraform-plugin-framework/schema/validator"
 	"github.com/hashicorp/terraform-plugin-framework/types"
 	"github.com/hashicorp/terraform-plugin-log/tflog"
 )
@@ -71,17 +68,11 @@ func (r *GCPProjectAckResource) Schema(ctx context.Context, req resource.SchemaR
 				Description: "The service account email.",
 				Required:    true,
 				Sensitive:   true,
-				Validators: []validator.String{
-					stringvalidator.RegexMatches(regexp.MustCompile(`^[a-z0-9-]+@[a-z0-9-]+\.[a-z0-9-]+$`), "Client email must be a valid email address."),
-				},
 			},
 			"private_key": schema.StringAttribute{
 				Description: "The service account private key.",
 				Required:    true,
 				Sensitive:   true,
-				Validators: []validator.String{
-					stringvalidator.RegexMatches(regexp.MustCompile(`^----- BEGIN PRIVATE KEY -----`), "Private key must be a valid private key."),
-				},
 			},
 			"account_token": schema.StringAttribute{
 				Description: "The collection token.",
@@ -130,10 +121,6 @@ func (r *GCPProjectAckResource) Create(ctx context.Context, req resource.CreateR
 				account_type
 				cloud_account_id
 				display_name
-				cloud_regions
-				stack_region
-				template_url
-				external_id
 				account_token
 			}
 		}`

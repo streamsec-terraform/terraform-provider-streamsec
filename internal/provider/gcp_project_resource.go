@@ -101,7 +101,7 @@ func (r *GCPProjectResource) Create(ctx context.Context, req resource.CreateRequ
 	}
 
 	query := `
-		mutation CreateAccount($account_type: CloudProvider!, $cloud_account_id: String!, $display_name: String, $cloud_regions: [String]) {
+		mutation CreateAccount($account_type: CloudProvider!, $cloud_account_id: String!, $display_name: String) {
 			createAccount(account: {
 				account_type: $account_type,
 				cloud_account_id: $cloud_account_id,
