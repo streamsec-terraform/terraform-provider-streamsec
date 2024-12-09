@@ -53,11 +53,11 @@ func (d *GCPProjectDataSource) Schema(ctx context.Context, req datasource.Schema
 				Required:            true,
 			},
 			"display_name": schema.StringAttribute{
-				MarkdownDescription: "The display name of the tenant.",
+				MarkdownDescription: "The display name of the project.",
 				Computed:            true,
 			},
 			"account_token": schema.StringAttribute{
-				MarkdownDescription: "The account token of the tenant.",
+				MarkdownDescription: "The account token of the project.",
 				Computed:            true,
 			},
 		},

@@ -38,7 +38,7 @@ type GCPProjectAckResourceModel struct {
 
 type GCPProjectAckRequestBody struct {
 	AccountType string `json:"account_type"`
-	TenantID    string `json:"project_id"`
+	ProjectID   string `json:"project_id"`
 	ClientEmail string `json:"client_email"`
 	PrivateKey  string `json:"private_key"`
 }
@@ -54,7 +54,7 @@ func (r *GCPProjectAckResource) Schema(ctx context.Context, req resource.SchemaR
 
 		Attributes: map[string]schema.Attribute{
 			"id": schema.StringAttribute{
-				Description: "The internal ID of the tenant.",
+				Description: "The internal ID of the project.",
 				Computed:    true,
 				PlanModifiers: []planmodifier.String{
 					stringplanmodifier.UseStateForUnknown(),
@@ -146,15 +146,15 @@ func (r *GCPProjectAckResource) Create(ctx context.Context, req resource.CreateR
 	}
 
 	if !accountFound {
-		resp.Diagnostics.AddError("Resource not found", fmt.Sprintf("Unable to get tenant, tenant with id: %s not found in Stream.Security API.", data.CloudAccountID.ValueString()))
+		resp.Diagnostics.AddError("Resource not found", fmt.Sprintf("Unable to get project, project with id: %s not found in Stream.Security API.", data.CloudAccountID.ValueString()))
 		return
 	}
 
-	tflog.Info(ctx, fmt.Sprintf("Tenant found: %v", data))
+	tflog.Info(ctx, fmt.Sprintf("GCP Project found: %v", data))
 
 	body := GCPProjectAckRequestBody{
 		AccountType: "GCP",
-		TenantID:    data.CloudAccountID.ValueString(),
+		ProjectID:   data.CloudAccountID.ValueString(),
 		ClientEmail: data.ClientEmail.ValueString(),
 		PrivateKey:  data.PrivateKey.ValueString(),
 	}
