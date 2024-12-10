@@ -29,6 +29,8 @@ type GoogleWorkspaceResourceModel struct {
 	ID             types.String `tfsdk:"id"`
 	DisplayName    types.String `tfsdk:"display_name"`
 	CloudAccountID types.String `tfsdk:"customer_id"`
+	ClientEmail    types.String `tfsdk:"client_email"`
+	PrivateKey     types.String `tfsdk:"private_key"`
 	AccountToken   types.String `tfsdk:"account_token"`
 }
 
@@ -59,6 +61,15 @@ func (r *GoogleWorkspaceResource) Schema(ctx context.Context, req resource.Schem
 				PlanModifiers: []planmodifier.String{
 					stringplanmodifier.RequiresReplace(),
 				},
+			},
+			"client_email": schema.StringAttribute{
+				Description: "The service account email.",
+				Required:    true,
+			},
+			"private_key": schema.StringAttribute{
+				Description: "The service account private key.",
+				Required:    true,
+				Sensitive:   true,
 			},
 			"account_token": schema.StringAttribute{
 				Description: "The account token.",
@@ -117,6 +128,8 @@ func (r *GoogleWorkspaceResource) Create(ctx context.Context, req resource.Creat
 		"account_type":     "GOOGLE_WORKSPACE",
 		"cloud_account_id": data.CloudAccountID.ValueString(),
 		"display_name":     data.DisplayName.ValueString(),
+		"client_email":     data.ClientEmail.ValueString(),
+		"private_key":      data.PrivateKey.ValueString(),
 	}
 
 	tflog.Debug(ctx, fmt.Sprintf("variables: %v", variables))
@@ -210,7 +223,7 @@ func (r *GoogleWorkspaceResource) Update(ctx context.Context, req resource.Updat
 	}
 
 	// check if there was a change in display_name
-	if data.DisplayName != state.DisplayName {
+	if data.DisplayName != state.DisplayName || data.ClientEmail != state.ClientEmail || data.PrivateKey != state.PrivateKey {
 		query := `
 			mutation UpdateAccount($id: ID!, $account: AccountUpdateInput) {
 				updateAccount(id: $id, account: $account) {
@@ -221,7 +234,10 @@ func (r *GoogleWorkspaceResource) Update(ctx context.Context, req resource.Updat
 		variables := map[string]interface{}{
 			"id": data.ID.ValueString(),
 			"account": map[string]interface{}{
-				"display_name": data.DisplayName.ValueString()}}
+				"display_name": data.DisplayName.ValueString(),
+				"client_email": data.ClientEmail.ValueString(),
+				"private_key":  data.PrivateKey.ValueString(),
+			}}
 
 		tflog.Debug(ctx, fmt.Sprintf("variables: %v", variables))
 
