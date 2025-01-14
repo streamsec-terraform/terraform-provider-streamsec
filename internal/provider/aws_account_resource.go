@@ -217,7 +217,7 @@ func (r *AWSAccountResource) Read(ctx context.Context, req resource.ReadRequest,
 	res, err := r.client.DoRequest(query, nil)
 
 	if err != nil {
-		resp.Diagnostics.AddError("Client Error", fmt.Sprintf("Unable to get account, got error: %s", err))
+		resp.Diagnostics.AddError("Client Error", fmt.Sprintf("Unable to get accounts, got error: %s", err))
 		return
 	}
 
@@ -244,7 +244,7 @@ func (r *AWSAccountResource) Read(ctx context.Context, req resource.ReadRequest,
 	}
 
 	if !accountFound {
-		resp.Diagnostics.AddError("Resource not found", fmt.Sprintf("Unable to get account, account with cloud_account_id: %s not found in Stream.Security API.", data.CloudAccountID.ValueString()))
+		resp.State.RemoveResource(ctx)
 		return
 	}
 

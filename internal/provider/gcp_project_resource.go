@@ -190,7 +190,7 @@ func (r *GCPProjectResource) Read(ctx context.Context, req resource.ReadRequest,
 	}
 
 	if !accountFound {
-		resp.Diagnostics.AddError("Resource not found", fmt.Sprintf("Unable to get account, GCP project with cloud_account_id: %s not found in Stream.Security API.", data.CloudAccountID.ValueString()))
+		resp.State.RemoveResource(ctx)
 		return
 	}
 

@@ -162,7 +162,7 @@ func (d *AWSAccountDataSource) Read(ctx context.Context, req datasource.ReadRequ
 	}
 
 	if !accountFound {
-		resp.Diagnostics.AddError("Resource not found", fmt.Sprintf("Unable to get account, account with cloud_account_id: %s not found in Stream.Security API.", data.CloudAccountID.ValueString()))
+		resp.State.RemoveResource(ctx)
 		return
 	}
 

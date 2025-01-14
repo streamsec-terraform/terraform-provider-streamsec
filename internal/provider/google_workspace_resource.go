@@ -203,7 +203,7 @@ func (r *GoogleWorkspaceResource) Read(ctx context.Context, req resource.ReadReq
 	}
 
 	if !accountFound {
-		resp.Diagnostics.AddError("Resource not found", fmt.Sprintf("Unable to get account, Google workspace with id: %s not found in Stream.Security API.", data.CloudAccountID.ValueString()))
+		resp.State.RemoveResource(ctx)
 		return
 	}
 

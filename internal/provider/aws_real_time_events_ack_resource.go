@@ -274,7 +274,7 @@ func (r *AWSRealTimeEventsAckResource) Read(ctx context.Context, req resource.Re
 				}
 			}
 			if !regionFound {
-				resp.Diagnostics.AddError("Region not found", "Unable to find the specified region in account enabled real-time regions")
+				resp.State.RemoveResource(ctx)
 				return
 			}
 			data.ID = types.StringValue(account["_id"].(string))
@@ -284,7 +284,7 @@ func (r *AWSRealTimeEventsAckResource) Read(ctx context.Context, req resource.Re
 	}
 
 	if !accountFound {
-		resp.Diagnostics.AddError("Resource not found", fmt.Sprintf("Unable to get account, account with cloud_account_id: %s not found in Stream.Security API.", data.CloudAccountID.ValueString()))
+		resp.State.RemoveResource(ctx)
 		return
 	}
 
