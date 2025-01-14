@@ -230,6 +230,10 @@ func (r *AWSAccountAckResource) Read(ctx context.Context, req resource.ReadReque
 			data.ID = types.StringValue(account["_id"].(string))
 			data.CloudAccountID = types.StringValue(account["cloud_account_id"].(string))
 			data.StackRegion = types.StringValue(account["stack_region"].(string))
+			data.RoleARN = types.StringValue("")
+			if roleARN, ok := account["role_arn"].(string); ok {
+				data.RoleARN = types.StringValue(roleARN)
+			}
 			accountFound = true
 		}
 	}
