@@ -205,7 +205,7 @@ func (r *AWSKubernetesClusterResource) Read(ctx context.Context, req resource.Re
 	}
 
 	if !clusterFound {
-		resp.Diagnostics.AddError("Resource not found", fmt.Sprintf("Unable to get EKS cluster, cluster with ARN: %s not found in Stream.Security API.", data.ARN.ValueString()))
+		resp.State.RemoveResource(ctx)
 		return
 	}
 

@@ -230,13 +230,16 @@ func (r *AWSAccountAckResource) Read(ctx context.Context, req resource.ReadReque
 			data.ID = types.StringValue(account["_id"].(string))
 			data.CloudAccountID = types.StringValue(account["cloud_account_id"].(string))
 			data.StackRegion = types.StringValue(account["stack_region"].(string))
-			data.RoleARN = types.StringValue(account["role_arn"].(string))
+			data.RoleARN = types.StringValue("")
+			if roleARN, ok := account["role_arn"].(string); ok {
+				data.RoleARN = types.StringValue(roleARN)
+			}
 			accountFound = true
 		}
 	}
 
 	if !accountFound {
-		resp.Diagnostics.AddError("Resource not found", fmt.Sprintf("Unable to get account, account with cloud_account_id: %s not found in Stream.Security API.", data.CloudAccountID.ValueString()))
+		resp.State.RemoveResource(ctx)
 		return
 	}
 

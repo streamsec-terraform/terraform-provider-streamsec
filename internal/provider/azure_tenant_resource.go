@@ -207,7 +207,7 @@ func (r *AzureTenantResource) Read(ctx context.Context, req resource.ReadRequest
 	}
 
 	if !accountFound {
-		resp.Diagnostics.AddError("Resource not found", fmt.Sprintf("Unable to get tenant, tenant with id: %s not found in Stream.Security API.", data.ID.ValueString()))
+		resp.State.RemoveResource(ctx)
 		return
 	}
 
