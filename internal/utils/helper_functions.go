@@ -58,3 +58,11 @@ func ConvertStringsArrayToTypesList(values []string) types.List {
 
 	return list
 }
+
+func ConvertToStringMap(values map[string]attr.Value) map[string]string {
+	result := make(map[string]string)
+	for _, v := range values {
+		result[v.String()] = v.String()
+	}
+	return result
+}
