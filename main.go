@@ -38,7 +38,7 @@ func main() {
 	flag.Parse()
 
 	opts := providerserver.ServeOpts{
-		Address: "registry.terraform.io/hashicorp/streamsec",
+		Address: "registry.terraform.io/streamsec-terraform/streamsec",
 		Debug:   debug,
 	}
 

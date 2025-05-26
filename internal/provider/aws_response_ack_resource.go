@@ -11,7 +11,6 @@ import (
 	"terraform-provider-streamsec/internal/utils"
 
 	"github.com/hashicorp/terraform-plugin-framework-validators/stringvalidator"
-	"github.com/hashicorp/terraform-plugin-framework/attr"
 	"github.com/hashicorp/terraform-plugin-framework/path"
 	"github.com/hashicorp/terraform-plugin-framework/resource"
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema"
@@ -31,15 +30,15 @@ func NewAWSResponseAckResource() resource.Resource {
 }
 
 type RemediationRequestBody struct {
-	AccountId       string            `json:"AccountId"`
-	Region          string            `json:"Region"`
-	TemplateVersion string            `json:"TemplateVersion"`
-	ExternalId      string            `json:"ExternalId"`
-	RoleARN         string            `json:"RoleARN"`
-	StackId         string            `json:"StackId"`
-	RunbookList     []string          `json:"RunbookList"`
-	RunbookRoleList []string          `json:"RunbookRoleList"`
-	PolicyToRoleMap map[string]string `json:"PolicyToRoleMap"`
+	AccountId       string            `json:"aws_account_id"`
+	Region          string            `json:"region"`
+	TemplateVersion string            `json:"template_version"`
+	ExternalId      string            `json:"external_id"`
+	RoleARN         string            `json:"remediation_role_arn"`
+	StackId         string            `json:"stack_id"`
+	RunbookList     []string          `json:"runbook_list"`
+	RunbookRoleList []string          `json:"runbook_role_list"`
+	PolicyToRoleMap map[string]string `json:"policy_to_role_map"`
 }
 
 type AWSResponseAckResource struct {
@@ -168,7 +167,6 @@ func (r *AWSResponseAckResource) Create(ctx context.Context, req resource.Create
 				cloud_regions
 				stack_region
 				template_url
-				external_id
 				lightlytics_collection_token
 				account_auth_token
 				remediation {
@@ -197,7 +195,7 @@ func (r *AWSResponseAckResource) Create(ctx context.Context, req resource.Create
 
 		account := acc.(map[string]interface{})
 		if account["cloud_account_id"].(string) == data.CloudAccountID.ValueString() {
-			if account["remediation"] != nil {
+			if account["remediation"] != nil && account["remediation"].(map[string]interface{})["status"] != nil {
 				if account["remediation"].(map[string]interface{})["status"].(string) == "READY" {
 					resp.Diagnostics.AddError("Client Error", "Account remediation is already enabled")
 					return
@@ -205,11 +203,6 @@ func (r *AWSResponseAckResource) Create(ctx context.Context, req resource.Create
 			}
 			data.ID = types.StringValue(account["_id"].(string))
 			data.StreamsecCollectionToken = types.StringValue(account["lightlytics_collection_token"].(string))
-			data.RoleARN = types.StringValue(account["remediation"].(map[string]interface{})["role_arn"].(string))
-			data.RunbookList = types.ListValueMust(types.StringType, account["remediation"].(map[string]interface{})["runbook_list"].([]attr.Value))
-			data.RunbookRoleList = types.ListValueMust(types.StringType, account["remediation"].(map[string]interface{})["runbook_role_list"].([]attr.Value))
-			data.PolicyToRoleMap = types.MapValueMust(types.StringType, account["remediation"].(map[string]interface{})["policy_to_role_map"].(map[string]attr.Value))
-			data.ExternalId = types.StringValue(account["remediation"].(map[string]interface{})["external_id"].(string))
 			accountFound = true
 		}
 	}
@@ -241,6 +234,7 @@ func (r *AWSResponseAckResource) Create(ctx context.Context, req resource.Create
 
 	ackReq, err := http.NewRequest("POST", url, bytes.NewBuffer(jsonData))
 	ackReq.Header.Set("Authorization", "Bearer "+data.StreamsecCollectionToken.ValueString())
+	ackReq.Header.Set("Content-Type", "application/json")
 
 	tflog.Debug(ctx, fmt.Sprintf("Request: %v", ackReq))
 
@@ -290,13 +284,13 @@ func (r *AWSResponseAckResource) Read(ctx context.Context, req resource.ReadRequ
 				display_name
 				cloud_regions
 				template_url
-				external_id
 				lightlytics_collection_token
 				account_auth_token
 				remediation {
 					status
 					role_arn
 					stack_id
+					external_id
 					runbook_list
 					runbook_role_list
 					policy_to_role_map
@@ -327,13 +321,15 @@ func (r *AWSResponseAckResource) Read(ctx context.Context, req resource.ReadRequ
 				resp.State.RemoveResource(ctx)
 				return
 			}
+
 			data.ID = types.StringValue(account["_id"].(string))
 			data.StreamsecCollectionToken = types.StringValue(account["lightlytics_collection_token"].(string))
 			data.RoleARN = types.StringValue(account["remediation"].(map[string]interface{})["role_arn"].(string))
-			data.RunbookList = types.ListValueMust(types.StringType, account["remediation"].(map[string]interface{})["runbook_list"].([]attr.Value))
-			data.RunbookRoleList = types.ListValueMust(types.StringType, account["remediation"].(map[string]interface{})["runbook_role_list"].([]attr.Value))
-			data.PolicyToRoleMap = types.MapValueMust(types.StringType, account["policy_to_role_map"].(map[string]attr.Value))
-			data.ExternalId = types.StringValue(account["external_id"].(string))
+			data.ExternalId = types.StringValue(account["remediation"].(map[string]interface{})["external_id"].(string))
+			data.RunbookList = utils.ConvertInterfaceToTypesList((account["remediation"].(map[string]interface{})["runbook_list"].([]interface{})))
+			data.RunbookRoleList = utils.ConvertInterfaceToTypesList((account["remediation"].(map[string]interface{})["runbook_role_list"].([]interface{})))
+			data.PolicyToRoleMap = utils.ConvertInterfaceToTypesMap((account["remediation"].(map[string]interface{})["policy_to_role_map"].(map[string]interface{})))
+
 			accountFound = true
 		}
 	}
@@ -358,7 +354,103 @@ func (r *AWSResponseAckResource) Update(ctx context.Context, req resource.Update
 		return
 	}
 
-	// Save updated data into Terraform state
+	query := `
+		query {
+			accounts {
+				_id
+				account_type
+				cloud_account_id
+				display_name
+				cloud_regions
+				stack_region
+				template_url
+				lightlytics_collection_token
+				account_auth_token
+				remediation {
+					status
+					role_arn
+					stack_id
+					runbook_list
+					runbook_role_list
+					policy_to_role_map
+					external_id
+				}
+			}
+		}`
+
+	res, err := r.client.DoRequest(query, nil)
+
+	if err != nil {
+		resp.Diagnostics.AddError("Client Error", fmt.Sprintf("Unable to get account, got error: %s", err))
+		return
+	}
+
+	accounts := res["accounts"].([]interface{})
+	accountFound := false
+
+	for _, acc := range accounts {
+		account := acc.(map[string]interface{})
+		if account["cloud_account_id"].(string) == data.CloudAccountID.ValueString() {
+			data.ID = types.StringValue(account["_id"].(string))
+			data.StreamsecCollectionToken = types.StringValue(account["lightlytics_collection_token"].(string))
+			accountFound = true
+		}
+	}
+
+	if !accountFound {
+		resp.Diagnostics.AddError("Resource not found", fmt.Sprintf("Unable to get account, account with cloud_account_id: %s not found in Stream.Security API.", data.CloudAccountID.ValueString()))
+		return
+	}
+
+	body := RemediationRequestBody{
+		AccountId:       data.CloudAccountID.ValueString(),
+		Region:          data.Region.ValueString(),
+		TemplateVersion: "1",
+		ExternalId:      data.ExternalId.ValueString(),
+		RoleARN:         data.RoleARN.ValueString(),
+		StackId:         "terraform",
+		RunbookList:     utils.ConvertToStringSlice(data.RunbookList.Elements()),
+		RunbookRoleList: utils.ConvertToStringSlice(data.RunbookRoleList.Elements()),
+		PolicyToRoleMap: utils.ConvertToStringMap(data.PolicyToRoleMap.Elements()),
+	}
+
+	jsonData, err := json.Marshal(body)
+	if err != nil {
+		fmt.Printf("Error marshalling JSON: %s\n", err)
+		return
+	}
+
+	url := fmt.Sprintf("https://%s/api/accounts/accounts/remediation-acknowledge", r.client.Host)
+
+	ackReq, err := http.NewRequest("POST", url, bytes.NewBuffer(jsonData))
+	ackReq.Header.Set("Authorization", "Bearer "+data.StreamsecCollectionToken.ValueString())
+	ackReq.Header.Set("Content-Type", "application/json")
+
+	tflog.Debug(ctx, fmt.Sprintf("Request: %v", ackReq))
+
+	if err != nil {
+		resp.Diagnostics.AddError("Client Error", fmt.Sprintf("Unable to ack region, got error: %s", err))
+		return
+	}
+
+	ack, err := http.DefaultClient.Do(ackReq)
+
+	if err != nil {
+		resp.Diagnostics.AddError("Client Error", fmt.Sprintf("Unable to ack region, got error: %s", err))
+		return
+	}
+
+	if ack.StatusCode != 200 {
+		resp.Diagnostics.AddError("Client Error", fmt.Sprintf("Unable to update account, got error: %s", ack.Status))
+		return
+	}
+
+	tflog.Debug(ctx, fmt.Sprintf("Response: %v", res))
+
+	// Write logs using the tflog package
+	tflog.Trace(ctx, "updated a resource")
+
+	// Save data into Terraform state
 	resp.Diagnostics.Append(resp.State.Set(ctx, &data)...)
 }
 
