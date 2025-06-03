@@ -69,9 +69,9 @@ func ConvertStringsArrayToTypesList(values []string) types.List {
 
 func ConvertToStringMap(values map[string]attr.Value) map[string]string {
 	result := make(map[string]string)
-	for _, v := range values {
+	for key, v := range values {
 		vWithoutQuotes := strings.Replace(v.String(), "\"", "", -1)
-		result[vWithoutQuotes] = vWithoutQuotes
+		result[key] = vWithoutQuotes
 	}
 	return result
 }
