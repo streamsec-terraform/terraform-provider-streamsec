@@ -44,6 +44,14 @@ func ConvertInterfaceToTypesList(values []interface{}) types.List {
 	return list
 }
 
+func ConvertInterfaceToTypesMap(values map[string]interface{}) types.Map {
+	elements := make(map[string]attr.Value)
+	for k, v := range values {
+		elements[k] = types.StringValue(v.(string))
+	}
+	return types.MapValueMust(types.StringType, elements)
+}
+
 func ConvertStringsArrayToTypesList(values []string) types.List {
 	// Create a slice to hold the types.Value elements
 	elements := make([]attr.Value, len(values))
@@ -57,4 +65,13 @@ func ConvertStringsArrayToTypesList(values []string) types.List {
 	list := types.ListValueMust(types.StringType, elements)
 
 	return list
+}
+
+func ConvertToStringMap(values map[string]attr.Value) map[string]string {
+	result := make(map[string]string)
+	for _, v := range values {
+		vWithoutQuotes := strings.Replace(v.String(), "\"", "", -1)
+		result[vWithoutQuotes] = vWithoutQuotes
+	}
+	return result
 }
