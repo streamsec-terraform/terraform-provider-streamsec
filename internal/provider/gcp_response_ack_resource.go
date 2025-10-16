@@ -350,7 +350,7 @@ func (r *GCPResponseAckResource) Update(ctx context.Context, req resource.Update
 		return
 	}
 
-	url := fmt.Sprintf("https://%s/api/accounts/accounts/remediation-acknowledge", r.client.Host)
+	url := fmt.Sprintf("https://%s/gcp/remediation-acknowledge", r.client.Host)
 
 	ackReq, err := http.NewRequest("POST", url, bytes.NewBuffer(jsonData))
 	ackReq.Header.Set("Authorization", "Bearer "+data.AccountToken.ValueString())
