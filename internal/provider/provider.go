@@ -223,6 +223,7 @@ func (p *StreamsecProvider) Resources(ctx context.Context) []func() resource.Res
 		NewGCPProjectAckResource,
 		NewGoogleWorkspaceResource,
 		NewAWSResponseAckResource,
+		NewGCPResponseAckResource,
 	}
 }
 
