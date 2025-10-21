@@ -242,6 +242,7 @@ func (r *GCPResponseAckResource) Read(ctx context.Context, req resource.ReadRequ
 					status
 					runbook_list
 					location
+					template_version
 				}
 			}
 		}`
@@ -274,7 +275,7 @@ func (r *GCPResponseAckResource) Read(ctx context.Context, req resource.ReadRequ
 			data.AccountToken = types.StringValue(account["account_token"].(string))
 			data.RunbookList = utils.ConvertInterfaceToTypesList((account["remediation"].(map[string]interface{})["runbook_list"].([]interface{})))
 			data.Location = types.StringValue(account["remediation"].(map[string]interface{})["location"].(string))
-
+			data.TemplateVersion = types.StringValue(account["remediation"].(map[string]interface{})["template_version"].(string))
 			accountFound = true
 		}
 	}
