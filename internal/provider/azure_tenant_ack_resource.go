@@ -149,7 +149,6 @@ func (r *AzureTenantAckResource) Create(ctx context.Context, req resource.Create
 				display_name
 				cloud_regions
 				stack_region
-				template_url
 				external_id
 				account_token
 			}

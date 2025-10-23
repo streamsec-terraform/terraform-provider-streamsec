@@ -34,7 +34,6 @@ type AzureTenantDataSourceModel struct {
 	ID             types.String `tfsdk:"id"`
 	CloudAccountID types.String `tfsdk:"tenant_id"`
 	DisplayName    types.String `tfsdk:"display_name"`
-	TemplateURL    types.String `tfsdk:"template_url"`
 	AccountToken   types.String `tfsdk:"account_token"`
 }
 
@@ -61,10 +60,6 @@ func (d *AzureTenantDataSource) Schema(ctx context.Context, req datasource.Schem
 			},
 			"display_name": schema.StringAttribute{
 				MarkdownDescription: "The display name of the tenant.",
-				Computed:            true,
-			},
-			"template_url": schema.StringAttribute{
-				MarkdownDescription: "The template URL of the tenant.",
 				Computed:            true,
 			},
 			"account_token": schema.StringAttribute{
@@ -113,7 +108,6 @@ func (d *AzureTenantDataSource) Read(ctx context.Context, req datasource.ReadReq
 				cloud_account_id
 				display_name
 				cloud_regions
-				template_url
 				external_id
 				lightlytics_collection_token
 				account_token
@@ -143,7 +137,6 @@ func (d *AzureTenantDataSource) Read(ctx context.Context, req datasource.ReadReq
 			}
 			data.ID = types.StringValue(account["_id"].(string))
 			data.DisplayName = types.StringValue(account["display_name"].(string))
-			data.TemplateURL = types.StringValue(account["template_url"].(string))
 			data.AccountToken = types.StringValue(account["account_token"].(string))
 			accountFound = true
 		}
