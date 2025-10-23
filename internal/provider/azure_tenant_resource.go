@@ -29,7 +29,6 @@ type AzureTenantResourceModel struct {
 	ID             types.String `tfsdk:"id"`
 	CloudAccountID types.String `tfsdk:"tenant_id"`
 	DisplayName    types.String `tfsdk:"display_name"`
-	TemplateURL    types.String `tfsdk:"template_url"`
 	AccountToken   types.String `tfsdk:"account_token"`
 }
 
@@ -60,13 +59,6 @@ func (r *AzureTenantResource) Schema(ctx context.Context, req resource.SchemaReq
 			"display_name": schema.StringAttribute{
 				Description: "The display name of the account.",
 				Required:    true,
-			},
-			"template_url": schema.StringAttribute{
-				Description: "The template URL.",
-				Computed:    true,
-				PlanModifiers: []planmodifier.String{
-					stringplanmodifier.UseStateForUnknown(),
-				},
 			},
 			"account_token": schema.StringAttribute{
 				Description: "The account token.",
@@ -117,7 +109,6 @@ func (r *AzureTenantResource) Create(ctx context.Context, req resource.CreateReq
 			  })
 			{
 				_id
-				template_url
 				external_id
 				account_token
 			}
@@ -142,7 +133,6 @@ func (r *AzureTenantResource) Create(ctx context.Context, req resource.CreateReq
 
 	account := res["createAccount"].(map[string]interface{})
 	data.ID = types.StringValue(account["_id"].(string))
-	data.TemplateURL = types.StringValue(account["template_url"].(string))
 	data.AccountToken = types.StringValue(account["account_token"].(string))
 
 	// Write logs using the tflog package
@@ -171,7 +161,6 @@ func (r *AzureTenantResource) Read(ctx context.Context, req resource.ReadRequest
 				cloud_account_id
 				display_name
 				cloud_regions
-				template_url
 				external_id
 				lightlytics_collection_token
 				account_token
@@ -200,7 +189,6 @@ func (r *AzureTenantResource) Read(ctx context.Context, req resource.ReadRequest
 			}
 			data.ID = types.StringValue(account["_id"].(string))
 			data.DisplayName = types.StringValue(account["display_name"].(string))
-			data.TemplateURL = types.StringValue(account["template_url"].(string))
 			data.AccountToken = types.StringValue(account["account_token"].(string))
 			accountFound = true
 		}
