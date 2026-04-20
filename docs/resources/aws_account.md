@@ -21,10 +21,13 @@ AWSAccount resource
 - `cloud_regions` (List of String) The cloud regions.
 - `display_name` (String) The display name of the account.
 
+### Optional
+
+- `external_id` (String) The external ID used in the AWS IAM role trust policy. If omitted, Stream Security generates one. Changing this value requires resource replacement. Must be an 8-character uppercase alphanumeric string.
+
 ### Read-Only
 
 - `account_auth_token` (String) The account auth token.
-- `external_id` (String) The external ID.
 - `id` (String) The ID of the account.
 - `streamsec_collection_token` (String) The Streamsec collection token.
 - `template_url` (String) The template URL.
