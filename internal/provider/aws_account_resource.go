@@ -85,10 +85,15 @@ func (r *AWSAccountResource) Schema(ctx context.Context, req resource.SchemaRequ
 				},
 			},
 			"external_id": schema.StringAttribute{
-				Description: "The external ID.",
+				Description: "The external ID used in the AWS IAM role trust policy. If omitted, Stream Security generates one. Changing this value requires resource replacement.",
+				Optional:    true,
 				Computed:    true,
+				Validators: []validator.String{
+					stringvalidator.RegexMatches(regexp.MustCompile(`^[A-Z0-9]{8}$`), "external_id must be an 8-character uppercase alphanumeric string."),
+				},
 				PlanModifiers: []planmodifier.String{
 					stringplanmodifier.UseStateForUnknown(),
+					stringplanmodifier.RequiresReplace(),
 				},
 			},
 			"streamsec_collection_token": schema.StringAttribute{
@@ -139,12 +144,13 @@ func (r *AWSAccountResource) Create(ctx context.Context, req resource.CreateRequ
 	}
 
 	query := `
-		mutation CreateAccount($account_type: CloudProvider!, $cloud_account_id: String!, $display_name: String, $cloud_regions: [String]) {
+		mutation CreateAccount($account_type: CloudProvider!, $cloud_account_id: String!, $display_name: String, $cloud_regions: [String], $external_id: String) {
 			createAccount(account: {
 				account_type: $account_type,
 				cloud_account_id: $cloud_account_id,
 				display_name: $display_name,
 				cloud_regions: $cloud_regions,
+				external_id: $external_id,
 			  })
 			{
 				_id
@@ -160,6 +166,9 @@ func (r *AWSAccountResource) Create(ctx context.Context, req resource.CreateRequ
 		"cloud_account_id": data.CloudAccountID.ValueString(),
 		"display_name":     data.DisplayName.ValueString(),
 		"cloud_regions":    utils.ConvertToStringSlice(data.CloudRegions.Elements()), // Fix: Access the Value field directly
+	}
+	if !data.ExternalID.IsNull() && !data.ExternalID.IsUnknown() {
+		variables["external_id"] = data.ExternalID.ValueString()
 	}
 
 	tflog.Debug(ctx, fmt.Sprintf("variables: %v", variables))
