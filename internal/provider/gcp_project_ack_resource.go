@@ -139,10 +139,12 @@ func (r *GCPProjectAckResource) Create(ctx context.Context, req resource.CreateR
 
 		account := acc.(map[string]interface{})
 		if cloudAccountID, _ := account["cloud_account_id"].(string); cloudAccountID == data.CloudAccountID.ValueString() {
-			id, _ := account["_id"].(string)
-			accountToken, _ := account["account_token"].(string)
-			data.ID = types.StringValue(id)
-			data.AccountToken = types.StringValue(accountToken)
+			if id, ok := account["_id"].(string); ok {
+				data.ID = types.StringValue(id)
+			}
+			if accountToken, ok := account["account_token"].(string); ok {
+				data.AccountToken = types.StringValue(accountToken)
+			}
 			accountFound = true
 		}
 	}
@@ -235,12 +237,15 @@ func (r *GCPProjectAckResource) Read(ctx context.Context, req resource.ReadReque
 
 		account := acc.(map[string]interface{})
 		if cloudAccountID, _ := account["cloud_account_id"].(string); cloudAccountID == data.CloudAccountID.ValueString() {
-			accountToken, _ := account["account_token"].(string)
-			id, _ := account["_id"].(string)
-			clientEmail, _ := account["client_email"].(string)
-			data.AccountToken = types.StringValue(accountToken)
-			data.ID = types.StringValue(id)
-			data.ClientEmail = types.StringValue(clientEmail)
+			if accountToken, ok := account["account_token"].(string); ok {
+				data.AccountToken = types.StringValue(accountToken)
+			}
+			if id, ok := account["_id"].(string); ok {
+				data.ID = types.StringValue(id)
+			}
+			if clientEmail, ok := account["client_email"].(string); ok {
+				data.ClientEmail = types.StringValue(clientEmail)
+			}
 			accountFound = true
 		}
 	}
