@@ -139,12 +139,14 @@ func (r *GCPProjectAckResource) Create(ctx context.Context, req resource.CreateR
 
 		account := acc.(map[string]interface{})
 		if cloudAccountID, _ := account["cloud_account_id"].(string); cloudAccountID == data.CloudAccountID.ValueString() {
-			if id, ok := account["_id"].(string); ok {
-				data.ID = types.StringValue(id)
+			id, idOK := account["_id"].(string)
+			accountToken, tokenOK := account["account_token"].(string)
+			if !idOK || !tokenOK {
+				resp.Diagnostics.AddError("Incomplete account", fmt.Sprintf("Project %s was found in Stream.Security API without an id or account token.", data.CloudAccountID.ValueString()))
+				return
 			}
-			if accountToken, ok := account["account_token"].(string); ok {
-				data.AccountToken = types.StringValue(accountToken)
-			}
+			data.ID = types.StringValue(id)
+			data.AccountToken = types.StringValue(accountToken)
 			accountFound = true
 		}
 	}
@@ -243,9 +245,8 @@ func (r *GCPProjectAckResource) Read(ctx context.Context, req resource.ReadReque
 			if id, ok := account["_id"].(string); ok {
 				data.ID = types.StringValue(id)
 			}
-			if clientEmail, ok := account["client_email"].(string); ok {
-				data.ClientEmail = types.StringValue(clientEmail)
-			}
+			clientEmail, _ := account["client_email"].(string)
+			data.ClientEmail = types.StringValue(clientEmail)
 			accountFound = true
 		}
 	}
