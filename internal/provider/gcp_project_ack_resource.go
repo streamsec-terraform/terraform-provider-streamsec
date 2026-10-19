@@ -234,11 +234,14 @@ func (r *GCPProjectAckResource) Read(ctx context.Context, req resource.ReadReque
 
 	accounts := res["accounts"].([]interface{})
 	accountFound := false
+	stateID := data.ID.ValueString()
 
 	for _, acc := range accounts {
 
 		account := acc.(map[string]interface{})
-		if cloudAccountID, _ := account["cloud_account_id"].(string); cloudAccountID == data.CloudAccountID.ValueString() {
+		accountID, _ := account["_id"].(string)
+		cloudAccountID, _ := account["cloud_account_id"].(string)
+		if (stateID != "" && accountID == stateID) || (stateID == "" && cloudAccountID == data.CloudAccountID.ValueString()) {
 			if accountToken, ok := account["account_token"].(string); ok {
 				data.AccountToken = types.StringValue(accountToken)
 			}
