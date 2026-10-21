@@ -42,11 +42,19 @@ func addAPIError(diags *diag.Diagnostics, summary string, err error, hints statu
 	diags.AddError(summary, hints.detail(err))
 }
 
-// addDeleteError reports a failed destroy call. An account gone from Stream Security,
-// or a hub already turned off (404, 409), has nothing left to undo, so it only
+// The statuses on which a destroy has nothing left to undo: the account is gone from
+// Stream Security (404), or the hub was already turned off (409).
+var goneStatuses = []int{http.StatusNotFound, http.StatusConflict}
+
+// An uninstall acknowledgement only informs Stream Security, so a 403 must not block
+// destroying the AWS resources either: an expired trial refuses changes, and a scoped
+// token gets 403 for a deleted account.
+var uninstallGoneStatuses = []int{http.StatusForbidden, http.StatusNotFound, http.StatusConflict}
+
+// addDeleteError reports a failed destroy call. On one of the gone statuses it only
 // warns: an error would block the destroy and keep the resource in state.
-func addDeleteError(diags *diag.Diagnostics, errorSummary, goneSummary string, err error, hints statusHints) {
-	if hasStatus(err, http.StatusNotFound, http.StatusConflict) {
+func addDeleteError(diags *diag.Diagnostics, errorSummary, goneSummary string, err error, hints statusHints, gone []int) {
+	if hasStatus(err, gone...) {
 		diags.AddWarning(goneSummary, "It is removed from the Terraform state only.\n\n"+hints.detail(err))
 		return
 	}

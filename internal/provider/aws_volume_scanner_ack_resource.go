@@ -23,6 +23,9 @@ var _ resource.ResourceWithConfigure = &AWSVolumeScannerAckResource{}
 // The shape ms_accounts accepts (its _AWS_REGION_RE), not a list of regions.
 var awsRegionPattern = regexp.MustCompile(`^[a-z]{2,4}(-[a-z]{1,16}){1,3}-[0-9]{1,2}$`)
 
+// ms_accounts' _TERRAFORM_MODULE_VERSION_RE, which it matches whole, up to 64 characters.
+var moduleVersionPattern = regexp.MustCompile(`^v?[0-9]+\.[0-9]+\.[0-9]+(-[0-9A-Za-z.-]+)?(\+[0-9A-Za-z.-]+)?$`)
+
 func NewAWSVolumeScannerAckResource() resource.Resource {
 	return &AWSVolumeScannerAckResource{}
 }
@@ -90,10 +93,12 @@ func (r *AWSVolumeScannerAckResource) Schema(ctx context.Context, req resource.S
 				},
 			},
 			"module_version": schema.StringAttribute{
-				MarkdownDescription: "The version of the Terraform module that installed the scanner.",
-				Required:            true,
+				MarkdownDescription: "The version of the Terraform module that installed the scanner: `MAJOR.MINOR.PATCH`, with an optional " +
+					"leading `v` and `-pre` or `+build` suffixes, at most 64 characters.",
+				Required: true,
 				Validators: []validator.String{
-					stringvalidator.LengthBetween(1, 64),
+					stringvalidator.LengthAtMost(64),
+					stringvalidator.RegexMatches(moduleVersionPattern, "must be a version such as 1.16.0 (a leading v and -pre or +build suffixes are allowed)"),
 				},
 			},
 		},
@@ -142,7 +147,7 @@ func (r *AWSVolumeScannerAckResource) Delete(ctx context.Context, req resource.D
 	}
 	if err := r.acknowledge(ctx, data, "uninstalled"); err != nil {
 		addDeleteError(&resp.Diagnostics, "Unable to acknowledge the volume scanner uninstall", "Volume scanner uninstall not recorded",
-			err, volumeScannerAckHints(data.AccountID.ValueString()))
+			err, volumeScannerAckHints(data.AccountID.ValueString()), uninstallGoneStatuses)
 	}
 }
 

@@ -2,8 +2,10 @@ package provider
 
 import (
 	"context"
+	"fmt"
 	"net/http"
 	"sort"
+	"strings"
 	"testing"
 
 	"github.com/hashicorp/terraform-plugin-framework/attr"
@@ -41,15 +43,29 @@ func hubModel(coverage string, accountIDs types.Set) AWSScannerHubResourceModel 
 	}
 }
 
+// Create first checks over GraphQL that account_id is an AWS account.
+var accountsCall = apiCall{Method: http.MethodPost, URI: "/graphql", AnyBody: true}
+
+func accountsAnswer(accounts string) fakeResponse {
+	return fakeResponse{200, `{"data":{"accounts":` + accounts + `}}`}
+}
+
+func createRoutes(put fakeResponse) map[string]fakeResponse {
+	return map[string]fakeResponse{
+		"POST /graphql":  accountsAnswer(`[{"_id":"acc-a","account_type":"AWS"},{"_id":"hub-1","account_type":"AWS"},{"_id":"gcp-1","account_type":"GCP"}]`),
+		"PUT " + hubPath: put,
+	}
+}
+
 func TestScannerHubCreateSelectedPutsCoverageAndAccounts(t *testing.T) {
-	api, c := newFakeAPI(t, map[string]fakeResponse{"PUT " + hubPath: {200, `{"hubs":[]}`}})
+	api, c := newFakeAPI(t, createRoutes(fakeResponse{200, `{"hubs":[]}`}))
 	r := NewAWSScannerHubResource()
 	s := configured(t, r, c)
 
 	state, diags := doCreate(t, r, s, hubModel("selected", stringSet("acc-b", "acc-a")))
 	requireNoDiags(t, diags)
 
-	api.expectCalls(apiCall{Method: http.MethodPut, URI: hubPath, Body: map[string]interface{}{
+	api.expectCalls(accountsCall, apiCall{Method: http.MethodPut, URI: hubPath, Body: map[string]interface{}{
 		"coverage": "selected", "accounts": []interface{}{"acc-a", "acc-b"},
 	}})
 	var got AWSScannerHubResourceModel
@@ -63,14 +79,14 @@ func TestScannerHubCreateSelectedPutsCoverageAndAccounts(t *testing.T) {
 }
 
 func TestScannerHubCreateAllSendsNoAccounts(t *testing.T) {
-	api, c := newFakeAPI(t, map[string]fakeResponse{"PUT " + hubPath: {200, `{}`}})
+	api, c := newFakeAPI(t, createRoutes(fakeResponse{200, `{}`}))
 	r := NewAWSScannerHubResource()
 	s := configured(t, r, c)
 
 	state, diags := doCreate(t, r, s, hubModel("all", types.SetNull(types.StringType)))
 	requireNoDiags(t, diags)
 
-	api.expectCalls(apiCall{Method: http.MethodPut, URI: hubPath, Body: map[string]interface{}{
+	api.expectCalls(accountsCall, apiCall{Method: http.MethodPut, URI: hubPath, Body: map[string]interface{}{
 		"coverage": "all", "accounts": []interface{}{},
 	}})
 	var got AWSScannerHubResourceModel
@@ -82,26 +98,83 @@ func TestScannerHubCreateAllSendsNoAccounts(t *testing.T) {
 
 func TestScannerHubCreateConflictIsExplained(t *testing.T) {
 	// Through the front gate a 409 arrives without ms_accounts' detail.
-	_, c := newFakeAPI(t, map[string]fakeResponse{"PUT " + hubPath: {409, `{"error":"Request failed with status code 409"}`}})
+	_, c := newFakeAPI(t, createRoutes(fakeResponse{409, `{"error":"Request failed with status code 409"}`}))
 	r := NewAWSScannerHubResource()
 	s := configured(t, r, c)
 
 	state, diags := doCreate(t, r, s, hubModel("all", types.SetNull(types.StringType)))
 
-	requireError(t, diags, "409", "Request failed with status code 409", "already scans all AWS accounts", `only one hub may cover "all"`, "already scanned by another")
+	requireError(t, diags, "409", "Request failed with status code 409", "already scans all AWS accounts", `only one hub may cover "all"`,
+		"already scanned by another", "still be pinned to another hub", `set that hub to "selected" without the account`, `back to "all"`)
 	if !state.Raw.IsNull() {
 		t.Errorf("a failed create left state %v", state.Raw)
 	}
 }
 
 func TestScannerHubCreateShowsDetail(t *testing.T) {
-	_, c := newFakeAPI(t, map[string]fakeResponse{"PUT " + hubPath: {400, `{"detail":"Account acc-x is not a connected AWS account"}`}})
+	_, c := newFakeAPI(t, createRoutes(fakeResponse{400, `{"detail":"Account acc-x is not a connected AWS account"}`}))
 	r := NewAWSScannerHubResource()
 	s := configured(t, r, c)
 
 	_, diags := doCreate(t, r, s, hubModel("selected", stringSet("acc-x")))
 
 	requireError(t, diags, "400", "Account acc-x is not a connected AWS account")
+}
+
+// The backend takes the hub's cloud from the account: a GCP project's id would make a
+// GCP hub, which this resource could never read back or turn off.
+func TestScannerHubCreateRefusesAnAccountThatIsNotAWS(t *testing.T) {
+	api, c := newFakeAPI(t, createRoutes(fakeResponse{200, `{}`}))
+	r := NewAWSScannerHubResource()
+	s := configured(t, r, c)
+
+	model := hubModel("all", types.SetNull(types.StringType))
+	model.AccountID = types.StringValue("gcp-1")
+	state, diags := doCreate(t, r, s, model)
+
+	requireError(t, diags, "gcp-1", "GCP", "AWS account")
+	api.expectCalls(accountsCall)
+	if !state.Raw.IsNull() {
+		t.Errorf("a refused create left state %v", state.Raw)
+	}
+}
+
+func TestScannerHubCreateRefusesAnUnknownAccount(t *testing.T) {
+	api, c := newFakeAPI(t, createRoutes(fakeResponse{200, `{}`}))
+	r := NewAWSScannerHubResource()
+	s := configured(t, r, c)
+
+	model := hubModel("all", types.SetNull(types.StringType))
+	model.AccountID = types.StringValue("acc-gone")
+	_, diags := doCreate(t, r, s, model)
+
+	requireError(t, diags, "acc-gone", "streamsec_aws_account")
+	api.expectCalls(accountsCall)
+}
+
+func TestScannerHubCreateAccountsQueryFailureIsAnError(t *testing.T) {
+	api, c := newFakeAPI(t, map[string]fakeResponse{"POST /graphql": {200, `{"errors":[{"message":"No authorized"}]}`}})
+	r := NewAWSScannerHubResource()
+	s := configured(t, r, c)
+
+	_, diags := doCreate(t, r, s, hubModel("all", types.SetNull(types.StringType)))
+
+	requireError(t, diags, "No authorized")
+	api.expectCalls(accountsCall)
+}
+
+func TestScannerHubCreateAsksForTheAccountType(t *testing.T) {
+	api, c := newFakeAPI(t, createRoutes(fakeResponse{200, `{}`}))
+	r := NewAWSScannerHubResource()
+	s := configured(t, r, c)
+
+	_, diags := doCreate(t, r, s, hubModel("all", types.SetNull(types.StringType)))
+	requireNoDiags(t, diags)
+
+	query, _ := api.recorded()[0].Body["query"].(string)
+	if !strings.Contains(query, "accounts") || !strings.Contains(query, "_id") || !strings.Contains(query, "account_type") {
+		t.Errorf("GraphQL query = %q, want accounts' _id and account_type", query)
+	}
 }
 
 func TestScannerHubUpdatePutsNewCoverage(t *testing.T) {
@@ -158,7 +231,7 @@ func TestScannerHubDeleteOfAGoneHubWarns(t *testing.T) {
 }
 
 func TestScannerHubCreateBadRequestNamesTheFields(t *testing.T) {
-	_, c := newFakeAPI(t, map[string]fakeResponse{"PUT " + hubPath: {400, `{"error":"Request failed with status code 400"}`}})
+	_, c := newFakeAPI(t, createRoutes(fakeResponse{400, `{"error":"Request failed with status code 400"}`}))
 	r := NewAWSScannerHubResource()
 	s := configured(t, r, c)
 
@@ -277,6 +350,34 @@ func TestScannerHubReadFailureIsAnError(t *testing.T) {
 	_, diags := doRead(t, r, s, hubModel("selected", stringSet("acc-a")))
 
 	requireError(t, diags, "500", "No authorized")
+}
+
+// Thousands of spoke rows make the coverage answer megabytes long; the hub must still be read.
+func TestScannerHubReadsALargeCoverage(t *testing.T) {
+	var rows strings.Builder
+	for i := 0; i < 20000; i++ {
+		if i > 0 {
+			rows.WriteString(",")
+		}
+		fmt.Fprintf(&rows, `{"spoke_account_id":"spoke-%05d","region":"us-east-1","hub_account_id":"hub-1","scan_status":"completed"}`, i)
+	}
+	body := `{"spoke_scans":[` + rows.String() + `],"hubs":[{"hub_account_id":"hub-1","coverage":"selected"}],` +
+		`"assignments":[{"account_id":"acc-a","hub_account_id":"hub-1"}]}`
+	if len(body) <= 2<<20 {
+		t.Fatalf("the coverage answer is only %d bytes", len(body))
+	}
+	_, c := newFakeAPI(t, map[string]fakeResponse{"GET " + coveragePath: {200, body}})
+	r := NewAWSScannerHubResource()
+	s := configured(t, r, c)
+
+	state, diags := doRead(t, r, s, hubModel("selected", stringSet("acc-z")))
+	requireNoDiags(t, diags)
+
+	var got AWSScannerHubResourceModel
+	getState(t, state, &got)
+	if ids := setStrings(t, got.AccountIDs); len(ids) != 1 || ids[0] != "acc-a" {
+		t.Errorf("account_ids = %v, want [acc-a]", ids)
+	}
 }
 
 func TestScannerHubImportByAccountID(t *testing.T) {

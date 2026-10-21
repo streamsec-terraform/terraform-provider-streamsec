@@ -2,6 +2,7 @@ package provider
 
 import (
 	"context"
+	"fmt"
 	"net/http"
 	"sort"
 
@@ -66,8 +67,12 @@ var scannerHubHints = statusHints{
 	http.StatusForbidden: "Changing what a scanner covers needs a token with access to all accounts" + trialExpiredHint + ".",
 	http.StatusNotFound:  "account_id is not an account in Stream Security: it takes the Stream Security account id (streamsec_aws_account.<name>.id).",
 	http.StatusConflict: `Another account's scanner already scans all AWS accounts (only one hub may cover "all"), or one of ` +
-		"account_ids is already scanned by another hub. Change that hub's coverage first.",
+		"account_ids is already scanned by another hub. Change that hub's coverage first. " + pinnedAccountNote,
 }
+
+// Kept in the backend by design, and not in account_ids, so Read can't show it.
+const pinnedAccountNote = `An account may also still be pinned to another hub that scanned it while its coverage was "selected", ` +
+	`after that hub switched to "all": to release it, set that hub to "selected" without the account, apply, then set it back to "all".`
 
 func (r *AWSScannerHubResource) Metadata(ctx context.Context, req resource.MetadataRequest, resp *resource.MetadataResponse) {
 	resp.TypeName = req.ProviderTypeName + "_aws_scanner_hub"
@@ -77,7 +82,10 @@ func (r *AWSScannerHubResource) Schema(ctx context.Context, req resource.SchemaR
 	resp.Schema = schema.Schema{
 		MarkdownDescription: "Makes an AWS account's agentless volume scanner a hub: it also scans other AWS accounts in its regions, " +
 			"through the `StreamScannerSpokeRole` each of them creates (see the `streamsec_aws_scanner_hub_access` data source). " +
-			"Destroying it turns the hub off: each account goes back to its own scanner.",
+			"Destroying it turns the hub off: each account goes back to its own scanner.\n\n" +
+			"An account a hub scanned while its coverage was `selected` stays pinned to that hub after it switches to `all`, " +
+			"and another hub can't select it (Stream Security answers 409). To release it, set that hub to `selected` " +
+			"without the account, apply, then set it back to `all`.",
 
 		Attributes: map[string]schema.Attribute{
 			"account_id": schema.StringAttribute{
@@ -141,11 +149,42 @@ func (r *AWSScannerHubResource) Create(ctx context.Context, req resource.CreateR
 	if resp.Diagnostics.HasError() {
 		return
 	}
+	r.requireAWSAccount(data.AccountID.ValueString(), &resp.Diagnostics)
+	if resp.Diagnostics.HasError() {
+		return
+	}
 	r.setCoverage(ctx, data, &resp.Diagnostics)
 	if resp.Diagnostics.HasError() {
 		return
 	}
 	resp.Diagnostics.Append(resp.State.Set(ctx, &data)...)
+}
+
+// requireAWSAccount refuses an account that is not AWS. ms_accounts takes a hub's cloud
+// from its account, so a GCP project's id would make a GCP hub, which Read (AWS hubs
+// only) never finds and destroy never turns off. account_id replaces the resource, so
+// Create is the only place it can change.
+func (r *AWSScannerHubResource) requireAWSAccount(accountID string, diags *diag.Diagnostics) {
+	res, err := r.client.DoRequest(`query { accounts { _id account_type } }`, nil)
+	if err != nil {
+		diags.AddError("Unable to read the accounts", fmt.Sprintf("Checking that account %s is an AWS account: %s", accountID, err))
+		return
+	}
+	accounts, _ := res["accounts"].([]interface{})
+	for _, item := range accounts {
+		account, _ := item.(map[string]interface{})
+		if id, _ := account["_id"].(string); id != accountID {
+			continue
+		}
+		if accountType, _ := account["account_type"].(string); accountType != "AWS" {
+			diags.AddAttributeError(path.Root("account_id"), "Not an AWS account",
+				fmt.Sprintf("Account %s is a %s account: streamsec_aws_scanner_hub takes an AWS account.", accountID, accountType))
+		}
+		return
+	}
+	diags.AddAttributeError(path.Root("account_id"), "Account not found",
+		fmt.Sprintf("Account %s is not in Stream Security, or the token can't see it: account_id takes the Stream Security "+
+			"account id (streamsec_aws_account.<name>.id), not the 12-digit AWS account id.", accountID))
 }
 
 func (r *AWSScannerHubResource) Read(ctx context.Context, req resource.ReadRequest, resp *resource.ReadResponse) {
@@ -215,7 +254,7 @@ func (r *AWSScannerHubResource) Delete(ctx context.Context, req resource.DeleteR
 	err := r.client.DoRESTRequest(ctx, http.MethodPut, client.AccountsPath(data.AccountID.ValueString(), "scanner-hub"),
 		map[string]string{"coverage": "none"}, nil)
 	if err != nil {
-		addDeleteError(&resp.Diagnostics, "Unable to turn off the scanner hub", "Scanner hub already gone", err, scannerHubHints)
+		addDeleteError(&resp.Diagnostics, "Unable to turn off the scanner hub", "Scanner hub already gone", err, scannerHubHints, goneStatuses)
 	}
 }
 

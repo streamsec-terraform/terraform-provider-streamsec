@@ -110,10 +110,11 @@ func TestVolumeScannerAckCreateErrors(t *testing.T) {
 	}
 }
 
-// An account already gone from Stream has no scanner to mark uninstalled; that
-// must not block destroying the module.
+// An account already gone from Stream has no scanner to mark uninstalled, and a 403
+// (an expired trial refuses changes; a scoped token gets 403 for a deleted account)
+// must not block destroying the module either: the acknowledgement only informs Stream.
 func TestVolumeScannerAckDeleteOfAGoneAccountWarns(t *testing.T) {
-	for _, status := range []int{404, 409} {
+	for _, status := range []int{403, 404, 409} {
 		_, c := newFakeAPI(t, map[string]fakeResponse{"PUT " + volumeAckPath: {status, `{"error":"gone"}`}})
 		r := NewAWSVolumeScannerAckResource()
 		s := configured(t, r, c)

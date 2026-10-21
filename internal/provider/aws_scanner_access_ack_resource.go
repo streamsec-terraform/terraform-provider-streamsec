@@ -45,9 +45,10 @@ func scannerAccessAckHints(hubAccountID string) statusHints {
 	return statusHints{
 		http.StatusBadRequest: "Stream Security refused spoke_cloud_account_id: it must be a 12-digit AWS account id.",
 		http.StatusForbidden:  fmt.Sprintf("The token has no access to account %s%s.", hubAccountID, trialExpiredHint),
-		http.StatusNotFound: fmt.Sprintf("Account %s is not in Stream Security: hub_account_id takes the hub's Stream Security account id "+
-			"(streamsec_aws_account.<name>.id), not its 12-digit AWS account id.", hubAccountID),
-		http.StatusConflict: fmt.Sprintf("Account %s's scanner does not scan other accounts: make it a hub with streamsec_aws_scanner_hub first.", hubAccountID),
+		// Also the answer for an id that is no Stream Security account: there is no 404 here.
+		http.StatusConflict: fmt.Sprintf("Account %s's scanner does not scan other accounts: make it a hub with streamsec_aws_scanner_hub "+
+			"first. hub_account_id takes the hub's Stream Security account id (streamsec_aws_scanner_hub.<name>.account_id), "+
+			"not its 12-digit AWS account id.", hubAccountID),
 	}
 }
 
@@ -129,7 +130,7 @@ func (r *AWSScannerAccessAckResource) Delete(ctx context.Context, req resource.D
 	}
 	if err := r.acknowledge(ctx, data, "uninstalled"); err != nil {
 		addDeleteError(&resp.Diagnostics, "Unable to acknowledge the scanner access role uninstall", "Scanner access uninstall not recorded",
-			err, scannerAccessAckHints(data.HubAccountID.ValueString()))
+			err, scannerAccessAckHints(data.HubAccountID.ValueString()), uninstallGoneStatuses)
 	}
 }
 

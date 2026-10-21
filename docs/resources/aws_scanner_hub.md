@@ -4,11 +4,14 @@ page_title: "streamsec_aws_scanner_hub Resource - terraform-provider-streamsec"
 subcategory: ""
 description: |-
   Makes an AWS account's agentless volume scanner a hub: it also scans other AWS accounts in its regions, through the StreamScannerSpokeRole each of them creates (see the streamsec_aws_scanner_hub_access data source). Destroying it turns the hub off: each account goes back to its own scanner.
+  An account a hub scanned while its coverage was selected stays pinned to that hub after it switches to all, and another hub can't select it (Stream Security answers 409). To release it, set that hub to selected without the account, apply, then set it back to all.
 ---
 
 # streamsec_aws_scanner_hub (Resource)
 
 Makes an AWS account's agentless volume scanner a hub: it also scans other AWS accounts in its regions, through the `StreamScannerSpokeRole` each of them creates (see the `streamsec_aws_scanner_hub_access` data source). Destroying it turns the hub off: each account goes back to its own scanner.
+
+An account a hub scanned while its coverage was `selected` stays pinned to that hub after it switches to `all`, and another hub can't select it (Stream Security answers 409). To release it, set that hub to `selected` without the account, apply, then set it back to `all`.
 
 ## Example Usage
 

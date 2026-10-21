@@ -68,8 +68,9 @@ func TestScannerAccessAckCreateErrors(t *testing.T) {
 		resp fakeResponse
 		want []string
 	}{
-		{"not a hub", fakeResponse{409, `{"error":"Request failed with status code 409"}`}, []string{"409", "hub-1", "does not scan other accounts", "streamsec_aws_scanner_hub"}},
-		{"no such hub", fakeResponse{404, `{"error":"Request failed with status code 404"}`}, []string{"404", "hub-1", "streamsec_aws_account"}},
+		// Also what an id that is no Stream Security account gets: the backend has no 404 here.
+		{"not a hub", fakeResponse{409, `{"error":"Request failed with status code 409"}`},
+			[]string{"409", "hub-1", "does not scan other accounts", "streamsec_aws_scanner_hub", "not its 12-digit AWS account id"}},
 		{"bad request names the field", fakeResponse{400, `{"error":"Request failed with status code 400"}`}, []string{"400", "spoke_cloud_account_id"}},
 		{"forbidden explained", fakeResponse{403, `{"error":"Request failed with status code 403"}`}, []string{"403", "hub-1", "trial"}},
 	}
@@ -89,8 +90,11 @@ func TestScannerAccessAckCreateErrors(t *testing.T) {
 	}
 }
 
+// Destroying the spoke's role must not be blocked by what only informs Stream: a gone or
+// turned-off hub (404, 409), or a 403 (an expired trial refuses changes; a scoped token
+// gets 403 for a deleted account).
 func TestScannerAccessAckDeleteOfAGoneHubWarns(t *testing.T) {
-	for _, status := range []int{404, 409} {
+	for _, status := range []int{403, 404, 409} {
 		_, c := newFakeAPI(t, map[string]fakeResponse{"PUT " + accessAckPath: {status, `{"error":"gone"}`}})
 		r := NewAWSScannerAccessAckResource()
 		s := configured(t, r, c)
@@ -104,9 +108,9 @@ func TestScannerAccessAckDeleteOfAGoneHubWarns(t *testing.T) {
 }
 
 func TestScannerAccessAckDeleteFailureIsAnError(t *testing.T) {
-	_, c := newFakeAPI(t, map[string]fakeResponse{"PUT " + accessAckPath: {403, `{"error":"Request failed with status code 403"}`}})
+	_, c := newFakeAPI(t, map[string]fakeResponse{"PUT " + accessAckPath: {500, `{"error":"Request failed with status code 500"}`}})
 	r := NewAWSScannerAccessAckResource()
 	s := configured(t, r, c)
 
-	requireError(t, doDelete(t, r, s, accessAckModel()), "403")
+	requireError(t, doDelete(t, r, s, accessAckModel()), "500")
 }

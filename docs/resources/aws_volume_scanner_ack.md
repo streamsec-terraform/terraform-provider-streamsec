@@ -28,5 +28,5 @@ resource "streamsec_aws_volume_scanner_ack" "us_east_1" {
 ### Required
 
 - `account_id` (String) The Stream Security id of the AWS account (`streamsec_aws_account.<name>.id`). Changing it replaces the resource.
-- `module_version` (String) The version of the Terraform module that installed the scanner.
+- `module_version` (String) The version of the Terraform module that installed the scanner: `MAJOR.MINOR.PATCH`, with an optional leading `v` and `-pre` or `+build` suffixes, at most 64 characters.
 - `region` (String) The AWS region the scanner is installed in. Changing it replaces the resource.
