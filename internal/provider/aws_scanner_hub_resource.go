@@ -231,9 +231,6 @@ func (r *AWSScannerHubResource) setCoverage(ctx context.Context, data AWSScanner
 			return
 		}
 	}
-	if accounts == nil {
-		accounts = []string{}
-	}
 	sort.Strings(accounts)
 
 	err := r.client.DoRESTRequest(ctx, http.MethodPut, client.AccountsPath(data.AccountID.ValueString(), "scanner-hub"),
