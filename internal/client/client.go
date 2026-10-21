@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"net/http"
 
 	"github.com/machinebox/graphql"
 )
@@ -13,6 +14,8 @@ type Client struct {
 	Token         string
 	Workspace     string
 	Host          string
+	// HTTPClient makes DoRESTRequest's calls; nil uses a client with a timeout.
+	HTTPClient *http.Client
 }
 
 func NewClient(host, username, password, workspace_id *string, apiToken *string) (*Client, error) {
