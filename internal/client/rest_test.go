@@ -10,6 +10,7 @@ import (
 	"strings"
 	"sync"
 	"testing"
+	"unicode/utf8"
 )
 
 type capturedRequest struct {
@@ -206,6 +207,53 @@ func TestDoRESTRequestLongErrorBodyIsTruncated(t *testing.T) {
 	}
 	if len(apiErr.Detail) > 600 {
 		t.Errorf("Detail is %d bytes, want it truncated", len(apiErr.Detail))
+	}
+}
+
+func TestDoRESTRequestTruncatesOnARuneBoundary(t *testing.T) {
+	// One ASCII byte first, so the cut falls inside a two-byte rune.
+	srv, _ := newRESTTestServer(t, http.StatusInternalServerError, "x"+strings.Repeat("é", 1000))
+	err := restTestClient(srv, "tok", "ws").DoRESTRequest(context.Background(), http.MethodGet, "/api/x", nil, nil)
+	var apiErr *APIError
+	if !errors.As(err, &apiErr) {
+		t.Fatalf("err = %v, want *APIError", err)
+	}
+	if !utf8.ValidString(apiErr.Detail) || !strings.HasSuffix(apiErr.Detail, "...") || len(apiErr.Detail) > 600 {
+		t.Errorf("Detail = %q (%d bytes), want valid UTF-8 cut short with ...", apiErr.Detail, len(apiErr.Detail))
+	}
+}
+
+// A Client built without NewClient, as in tests, runs GraphQL over its HTTPClient.
+func TestDoRequestUsesHTTPClientWithoutNewClient(t *testing.T) {
+	srv, captured := newRESTTestServer(t, http.StatusOK, `{"data":{"accounts":[{"_id":"a1","account_type":"AWS"}]}}`)
+
+	data, err := restTestClient(srv, "tok", "ws").DoRequest(`query { accounts { _id account_type } }`, nil)
+	if err != nil {
+		t.Fatalf("DoRequest: %s", err)
+	}
+	req := captured.get(t, 0)
+	if req.method != http.MethodPost || req.uri != "/graphql" || req.headers.Get("Authorization") != "Bearer tok" || req.headers.Get("customer") != "ws" {
+		t.Errorf("request = %s %s %v", req.method, req.uri, req.headers)
+	}
+	accounts, _ := data["accounts"].([]interface{})
+	if len(accounts) != 1 {
+		t.Errorf("data = %v", data)
+	}
+}
+
+// A big workspace's scanner coverage is megabytes; a cap on answers would break every plan.
+func TestDoRESTRequestDecodesALargeAnswer(t *testing.T) {
+	padding := strings.Repeat("x", 3<<20)
+	srv, _ := newRESTTestServer(t, http.StatusOK, `{"padding":"`+padding+`","value":"ok"}`)
+	var out struct {
+		Padding string `json:"padding"`
+		Value   string `json:"value"`
+	}
+	if err := restTestClient(srv, "tok", "ws").DoRESTRequest(context.Background(), http.MethodGet, "/api/x", nil, &out); err != nil {
+		t.Fatalf("DoRESTRequest: %s", err)
+	}
+	if out.Value != "ok" || len(out.Padding) != len(padding) {
+		t.Errorf("decoded value %q and %d bytes of padding, want ok and %d", out.Value, len(out.Padding), len(padding))
 	}
 }
 

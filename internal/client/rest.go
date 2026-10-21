@@ -10,12 +10,16 @@ import (
 	"net/url"
 	"strings"
 	"time"
+	"unicode/utf8"
 
 	"github.com/hashicorp/terraform-plugin-log/tflog"
 )
 
-// The longest error body kept in an APIError's Detail.
-const maxErrorDetail = 512
+const (
+	// The most of an error body read, and the longest reason kept from it in an APIError's Detail.
+	maxErrorBody   = 64 << 10
+	maxErrorDetail = 512
+)
 
 var defaultHTTPClient = &http.Client{Timeout: 60 * time.Second}
 
@@ -75,30 +79,34 @@ func (c *Client) DoRESTRequest(ctx context.Context, method, path string, body, o
 		req.Header.Set("customer", c.Workspace)
 	}
 
-	httpClient := c.HTTPClient
-	if httpClient == nil {
-		httpClient = defaultHTTPClient
-	}
-	resp, err := httpClient.Do(req)
+	resp, err := c.httpClient().Do(req)
 	if err != nil {
 		return err
 	}
 	defer func() { _ = resp.Body.Close() }()
 	tflog.Debug(ctx, "Stream Security REST call", map[string]interface{}{"method": method, "path": path, "status": resp.StatusCode})
 
-	respBody, err := io.ReadAll(io.LimitReader(resp.Body, 1<<20))
-	if err != nil {
-		return fmt.Errorf("reading the %s %s answer: %w", method, path, err)
-	}
 	if resp.StatusCode < 200 || resp.StatusCode > 299 {
+		// Only the reason is kept, so the error body is capped; an answer is not.
+		respBody, err := io.ReadAll(io.LimitReader(resp.Body, maxErrorBody))
+		if err != nil {
+			return fmt.Errorf("reading the %s %s answer: %w", method, path, err)
+		}
 		return &APIError{Method: method, Path: path, StatusCode: resp.StatusCode, Detail: errorDetail(respBody)}
 	}
 	if out != nil {
-		if err := json.Unmarshal(respBody, out); err != nil {
+		if err := json.NewDecoder(resp.Body).Decode(out); err != nil {
 			return fmt.Errorf("decoding the %s %s answer: %w", method, path, err)
 		}
 	}
 	return nil
+}
+
+func (c *Client) httpClient() *http.Client {
+	if c.HTTPClient != nil {
+		return c.HTTPClient
+	}
+	return defaultHTTPClient
 }
 
 func errorDetail(body []byte) string {
@@ -122,7 +130,11 @@ func errorDetail(body []byte) string {
 		}
 	}
 	if len(text) > maxErrorDetail {
-		text = text[:maxErrorDetail] + "..."
+		cut := maxErrorDetail
+		for cut > 0 && !utf8.RuneStart(text[cut]) {
+			cut--
+		}
+		text = text[:cut] + "..."
 	}
 	return text
 }

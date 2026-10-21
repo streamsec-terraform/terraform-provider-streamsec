@@ -89,7 +89,7 @@ func (c *Client) DoRequest(query string, variables map[string]interface{}) (map[
 
 	// run it and capture the response
 	var data map[string]interface{}
-	if err := c.graphqlClient.Run(ctx, req, &data); err != nil {
+	if err := c.graphQL().Run(ctx, req, &data); err != nil {
 		return nil, err
 	}
 
@@ -110,9 +110,18 @@ func (c *Client) DoRequestWithToken(query string, variables map[string]interface
 
 	// run it and capture the response
 	var data map[string]interface{}
-	if err := c.graphqlClient.Run(ctx, req, &data); err != nil {
+	if err := c.graphQL().Run(ctx, req, &data); err != nil {
 		return nil, err
 	}
 
 	return data, nil
+}
+
+// graphQL is the client NewClient made or, for a Client built without NewClient (as in
+// tests), one over HTTPClient.
+func (c *Client) graphQL() *graphql.Client {
+	if c.graphqlClient != nil {
+		return c.graphqlClient
+	}
+	return graphql.NewClient(fmt.Sprintf("https://%s/graphql", c.Host), graphql.WithHTTPClient(c.httpClient()))
 }
