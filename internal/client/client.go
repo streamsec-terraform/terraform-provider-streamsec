@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"net/http"
 
 	"github.com/machinebox/graphql"
 )
@@ -13,6 +14,8 @@ type Client struct {
 	Token         string
 	Workspace     string
 	Host          string
+	// HTTPClient makes DoRESTRequest's calls; nil uses a client with a timeout.
+	HTTPClient *http.Client
 }
 
 func NewClient(host, username, password, workspace_id *string, apiToken *string) (*Client, error) {
@@ -68,6 +71,11 @@ func (c *Client) authenticate(username, password *string) error {
 }
 
 func (c *Client) DoRequest(query string, variables map[string]interface{}) (map[string]interface{}, error) {
+	return c.DoRequestContext(context.Background(), query, variables)
+}
+
+// DoRequestContext is DoRequest, stopped when ctx is.
+func (c *Client) DoRequestContext(ctx context.Context, query string, variables map[string]interface{}) (map[string]interface{}, error) {
 	req := graphql.NewRequest(query)
 
 	if c.Token != "" {
@@ -81,12 +89,9 @@ func (c *Client) DoRequest(query string, variables map[string]interface{}) (map[
 		req.Var(key, value)
 	}
 
-	// define a Context for the request
-	ctx := context.Background()
-
 	// run it and capture the response
 	var data map[string]interface{}
-	if err := c.graphqlClient.Run(ctx, req, &data); err != nil {
+	if err := c.graphQL().Run(ctx, req, &data); err != nil {
 		return nil, err
 	}
 
@@ -107,9 +112,18 @@ func (c *Client) DoRequestWithToken(query string, variables map[string]interface
 
 	// run it and capture the response
 	var data map[string]interface{}
-	if err := c.graphqlClient.Run(ctx, req, &data); err != nil {
+	if err := c.graphQL().Run(ctx, req, &data); err != nil {
 		return nil, err
 	}
 
 	return data, nil
+}
+
+// graphQL is the client NewClient made or, for a Client built without NewClient (as in
+// tests), one over HTTPClient.
+func (c *Client) graphQL() *graphql.Client {
+	if c.graphqlClient != nil {
+		return c.graphqlClient
+	}
+	return graphql.NewClient(fmt.Sprintf("https://%s/graphql", c.Host), graphql.WithHTTPClient(c.httpClient()))
 }

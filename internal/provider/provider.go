@@ -224,6 +224,9 @@ func (p *StreamsecProvider) Resources(ctx context.Context) []func() resource.Res
 		NewGoogleWorkspaceResource,
 		NewAWSResponseAckResource,
 		NewGCPResponseAckResource,
+		NewAWSScannerHubResource,
+		NewAWSVolumeScannerAckResource,
+		NewAWSScannerAccessAckResource,
 	}
 }
 
@@ -233,6 +236,7 @@ func (p *StreamsecProvider) DataSources(ctx context.Context) []func() datasource
 		NewAWSAccountDataSource,
 		NewAzureTenantDataSource,
 		NewGCPProjectDataSource,
+		NewAWSScannerHubAccessDataSource,
 	}
 }
 
