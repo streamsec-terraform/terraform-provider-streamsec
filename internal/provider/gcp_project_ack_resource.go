@@ -242,13 +242,16 @@ func (r *GCPProjectAckResource) Read(ctx context.Context, req resource.ReadReque
 		accountID, _ := account["_id"].(string)
 		cloudAccountID, _ := account["cloud_account_id"].(string)
 		if (stateID != "" && accountID == stateID) || (stateID == "" && cloudAccountID == data.CloudAccountID.ValueString()) {
+			clientEmail, ok := account["client_email"].(string)
+			if !ok || clientEmail == "" {
+				continue
+			}
 			if accountToken, ok := account["account_token"].(string); ok {
 				data.AccountToken = types.StringValue(accountToken)
 			}
 			if id, ok := account["_id"].(string); ok {
 				data.ID = types.StringValue(id)
 			}
-			clientEmail, _ := account["client_email"].(string)
 			data.ClientEmail = types.StringValue(clientEmail)
 			accountFound = true
 		}
