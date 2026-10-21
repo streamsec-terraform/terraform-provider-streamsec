@@ -7,9 +7,12 @@ import (
 	"io"
 	"net/http"
 	"net/http/httptest"
+	"net/http/httptrace"
+	"reflect"
 	"strings"
 	"sync"
 	"testing"
+	"time"
 	"unicode/utf8"
 )
 
@@ -262,6 +265,43 @@ func TestDoRESTRequestUndecodableSuccessIsAnError(t *testing.T) {
 	var out map[string]interface{}
 	if err := restTestClient(srv, "tok", "ws").DoRESTRequest(context.Background(), http.MethodGet, "/api/x", nil, &out); err == nil {
 		t.Fatal("want an error for a 200 that isn't JSON")
+	}
+}
+
+// A hub rollout makes a call per account: each must not pay for a new TLS connection.
+func TestDoRESTRequestReusesTheConnection(t *testing.T) {
+	srv, _ := newRESTTestServer(t, http.StatusOK, `{"region":"us-east-1","status":"deployed"}`)
+	c := restTestClient(srv, "tok", "ws")
+	var reused []bool
+	ctx := httptrace.WithClientTrace(context.Background(), &httptrace.ClientTrace{
+		GotConn: func(info httptrace.GotConnInfo) { reused = append(reused, info.Reused) },
+	})
+	var out map[string]interface{}
+	for _, o := range []interface{}{nil, &out, nil} {
+		if err := c.DoRESTRequest(ctx, http.MethodPut, "/api/x", map[string]string{"status": "deployed"}, o); err != nil {
+			t.Fatalf("DoRESTRequest: %s", err)
+		}
+	}
+	if want := []bool{false, true, true}; !reflect.DeepEqual(reused, want) {
+		t.Errorf("connection reused = %v, want %v", reused, want)
+	}
+}
+
+func TestDoRequestContextStopsWithItsContext(t *testing.T) {
+	release := make(chan struct{})
+	srv := httptest.NewTLSServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		select {
+		case <-r.Context().Done():
+		case <-release:
+		}
+	}))
+	t.Cleanup(func() { close(release); srv.Close() })
+	ctx, cancel := context.WithTimeout(context.Background(), 100*time.Millisecond)
+	defer cancel()
+
+	_, err := restTestClient(srv, "tok", "ws").DoRequestContext(ctx, `query { accounts { _id } }`, nil)
+	if !errors.Is(err, context.DeadlineExceeded) {
+		t.Fatalf("err = %v, want the context's deadline", err)
 	}
 }
 

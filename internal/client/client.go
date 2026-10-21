@@ -71,6 +71,11 @@ func (c *Client) authenticate(username, password *string) error {
 }
 
 func (c *Client) DoRequest(query string, variables map[string]interface{}) (map[string]interface{}, error) {
+	return c.DoRequestContext(context.Background(), query, variables)
+}
+
+// DoRequestContext is DoRequest, stopped when ctx is.
+func (c *Client) DoRequestContext(ctx context.Context, query string, variables map[string]interface{}) (map[string]interface{}, error) {
 	req := graphql.NewRequest(query)
 
 	if c.Token != "" {
@@ -83,9 +88,6 @@ func (c *Client) DoRequest(query string, variables map[string]interface{}) (map[
 	for key, value := range variables {
 		req.Var(key, value)
 	}
-
-	// define a Context for the request
-	ctx := context.Background()
 
 	// run it and capture the response
 	var data map[string]interface{}

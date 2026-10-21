@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"net/http"
 	"sort"
+	"time"
 
 	"terraform-provider-streamsec/internal/client"
 
@@ -149,7 +150,7 @@ func (r *AWSScannerHubResource) Create(ctx context.Context, req resource.CreateR
 	if resp.Diagnostics.HasError() {
 		return
 	}
-	r.requireAWSAccount(data.AccountID.ValueString(), &resp.Diagnostics)
+	r.requireAWSAccount(ctx, data.AccountID.ValueString(), &resp.Diagnostics)
 	if resp.Diagnostics.HasError() {
 		return
 	}
@@ -160,12 +161,17 @@ func (r *AWSScannerHubResource) Create(ctx context.Context, req resource.CreateR
 	resp.Diagnostics.Append(resp.State.Set(ctx, &data)...)
 }
 
+// awsAccountCheckTimeout bounds requireAWSAccount's query: the GraphQL client has no timeout.
+var awsAccountCheckTimeout = time.Minute
+
 // requireAWSAccount refuses an account that is not AWS. ms_accounts takes a hub's cloud
 // from its account, so a GCP project's id would make a GCP hub, which Read (AWS hubs
 // only) never finds and destroy never turns off. account_id replaces the resource, so
 // Create is the only place it can change.
-func (r *AWSScannerHubResource) requireAWSAccount(accountID string, diags *diag.Diagnostics) {
-	res, err := r.client.DoRequest(`query { accounts { _id account_type } }`, nil)
+func (r *AWSScannerHubResource) requireAWSAccount(ctx context.Context, accountID string, diags *diag.Diagnostics) {
+	ctx, cancel := context.WithTimeout(ctx, awsAccountCheckTimeout)
+	defer cancel()
+	res, err := r.client.DoRequestContext(ctx, `query { accounts { _id account_type } }`, nil)
 	if err != nil {
 		diags.AddError("Unable to read the accounts", fmt.Sprintf("Checking that account %s is an AWS account: %s", accountID, err))
 		return

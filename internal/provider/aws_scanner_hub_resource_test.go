@@ -4,13 +4,19 @@ import (
 	"context"
 	"fmt"
 	"net/http"
+	"net/http/httptest"
 	"sort"
 	"strings"
 	"testing"
+	"time"
+
+	"terraform-provider-streamsec/internal/client"
 
 	"github.com/hashicorp/terraform-plugin-framework/attr"
+	"github.com/hashicorp/terraform-plugin-framework/diag"
 	"github.com/hashicorp/terraform-plugin-framework/path"
 	"github.com/hashicorp/terraform-plugin-framework/resource"
+	"github.com/hashicorp/terraform-plugin-framework/tfsdk"
 	"github.com/hashicorp/terraform-plugin-framework/types"
 )
 
@@ -175,6 +181,52 @@ func TestScannerHubCreateAsksForTheAccountType(t *testing.T) {
 	if !strings.Contains(query, "accounts") || !strings.Contains(query, "_id") || !strings.Contains(query, "account_type") {
 		t.Errorf("GraphQL query = %q, want accounts' _id and account_type", query)
 	}
+}
+
+// silentAPI takes every call and never answers it: only the caller can end one.
+func silentAPI(t *testing.T) *client.Client {
+	t.Helper()
+	release := make(chan struct{})
+	srv := httptest.NewTLSServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		select {
+		case <-r.Context().Done():
+		case <-release:
+		}
+	}))
+	t.Cleanup(func() { close(release); srv.Close() })
+	return &client.Client{Host: srv.Listener.Addr().String(), Token: testToken, Workspace: testWorkspace, HTTPClient: srv.Client()}
+}
+
+// createWithin runs Create with ctx and fails the test if it is still waiting after a while.
+func createWithin(t *testing.T, ctx context.Context, c *client.Client) diag.Diagnostics {
+	t.Helper()
+	r := NewAWSScannerHubResource()
+	s := configured(t, r, c)
+	p := planOf(t, s, hubModel("all", types.SetNull(types.StringType)))
+	resp := &resource.CreateResponse{State: nullState(s)}
+	done := make(chan struct{})
+	go func() {
+		defer close(done)
+		r.Create(ctx, resource.CreateRequest{Plan: p, Config: tfsdk.Config{Schema: s, Raw: p.Raw}}, resp)
+	}()
+	select {
+	case <-done:
+	case <-time.After(10 * time.Second):
+		t.Fatal("Create is still checking the account")
+	}
+	return resp.Diagnostics
+}
+
+func TestScannerHubCreateStopsCheckingTheAccountWhenCancelled(t *testing.T) {
+	ctx, cancel := context.WithCancel(context.Background())
+	time.AfterFunc(100*time.Millisecond, cancel)
+	requireError(t, createWithin(t, ctx, silentAPI(t)), "Unable to read the accounts", "context canceled")
+}
+
+func TestScannerHubCreateGivesUpOnAnAccountCheckThatNeverAnswers(t *testing.T) {
+	defer func(was time.Duration) { awsAccountCheckTimeout = was }(awsAccountCheckTimeout)
+	awsAccountCheckTimeout = 100 * time.Millisecond
+	requireError(t, createWithin(t, context.Background(), silentAPI(t)), "Unable to read the accounts", "deadline exceeded")
 }
 
 func TestScannerHubUpdatePutsNewCoverage(t *testing.T) {

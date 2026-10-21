@@ -19,6 +19,9 @@ const (
 	// The most of an error body read, and the longest reason kept from it in an APIError's Detail.
 	maxErrorBody   = 64 << 10
 	maxErrorDetail = 512
+	// The most of an answer left after decoding that is read so its connection is reused;
+	// a longer one's connection is closed.
+	maxDrainedBody = 64 << 10
 )
 
 var defaultHTTPClient = &http.Client{Timeout: 60 * time.Second}
@@ -99,6 +102,8 @@ func (c *Client) DoRESTRequest(ctx context.Context, method, path string, body, o
 			return fmt.Errorf("decoding the %s %s answer: %w", method, path, err)
 		}
 	}
+	// A body closed unread closes its connection, so the next call would open another.
+	_, _ = io.Copy(io.Discard, io.LimitReader(resp.Body, maxDrainedBody))
 	return nil
 }
 
