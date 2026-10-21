@@ -172,6 +172,11 @@ func TestScannerHubConfigValidation(t *testing.T) {
 			map[string]tftypes.Value{"account_id": str("acc-1"), "region": str("us-east-1"), "module_version": str("latest")}, "module_version"},
 		{"module_version of two parts", "streamsec_aws_volume_scanner_ack",
 			map[string]tftypes.Value{"account_id": str("acc-1"), "region": str("us-east-1"), "module_version": str("1.16")}, "module_version"},
+		// The whole value must match, as the backend's fullmatch does.
+		{"module_version with a prefix", "streamsec_aws_volume_scanner_ack",
+			map[string]tftypes.Value{"account_id": str("acc-1"), "region": str("us-east-1"), "module_version": str("release-1.16.0")}, "module_version"},
+		{"module_version with trailing junk", "streamsec_aws_volume_scanner_ack",
+			map[string]tftypes.Value{"account_id": str("acc-1"), "region": str("us-east-1"), "module_version": str("1.16.0_rc")}, "module_version"},
 		{"module_version with an empty suffix", "streamsec_aws_volume_scanner_ack",
 			map[string]tftypes.Value{"account_id": str("acc-1"), "region": str("us-east-1"), "module_version": str("1.16.0-")}, "module_version"},
 		{"volume ack ok", "streamsec_aws_volume_scanner_ack",
