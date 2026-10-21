@@ -62,16 +62,30 @@ func TestScannerAccessAckReadKeepsStateWithoutCalls(t *testing.T) {
 	}
 }
 
-func TestScannerAccessAckCreateConflictIsExplained(t *testing.T) {
-	_, c := newFakeAPI(t, map[string]fakeResponse{"PUT " + accessAckPath: {409, `{"error":"Request failed with status code 409"}`}})
-	r := NewAWSScannerAccessAckResource()
-	s := configured(t, r, c)
+func TestScannerAccessAckCreateErrors(t *testing.T) {
+	cases := []struct {
+		name string
+		resp fakeResponse
+		want []string
+	}{
+		{"not a hub", fakeResponse{409, `{"error":"Request failed with status code 409"}`}, []string{"409", "hub-1", "does not scan other accounts", "streamsec_aws_scanner_hub"}},
+		{"no such hub", fakeResponse{404, `{"error":"Request failed with status code 404"}`}, []string{"404", "hub-1", "streamsec_aws_account"}},
+		{"bad request names the field", fakeResponse{400, `{"error":"Request failed with status code 400"}`}, []string{"400", "spoke_cloud_account_id"}},
+		{"forbidden explained", fakeResponse{403, `{"error":"Request failed with status code 403"}`}, []string{"403", "hub-1", "trial"}},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			_, c := newFakeAPI(t, map[string]fakeResponse{"PUT " + accessAckPath: tc.resp})
+			r := NewAWSScannerAccessAckResource()
+			s := configured(t, r, c)
 
-	state, diags := doCreate(t, r, s, accessAckModel())
+			state, diags := doCreate(t, r, s, accessAckModel())
 
-	requireError(t, diags, "409", "hub-1", "streamsec_aws_scanner_hub")
-	if !state.Raw.IsNull() {
-		t.Errorf("a failed create left state %v", state.Raw)
+			requireError(t, diags, tc.want...)
+			if !state.Raw.IsNull() {
+				t.Errorf("a failed create left state %v", state.Raw)
+			}
+		})
 	}
 }
 

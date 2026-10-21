@@ -88,7 +88,7 @@ func TestScannerHubCreateConflictIsExplained(t *testing.T) {
 
 	state, diags := doCreate(t, r, s, hubModel("all", types.SetNull(types.StringType)))
 
-	requireError(t, diags, "409", "Request failed with status code 409", "already scans all AWS accounts", "already scanned by another")
+	requireError(t, diags, "409", "Request failed with status code 409", "already scans all AWS accounts", `only one hub may cover "all"`, "already scanned by another")
 	if !state.Raw.IsNull() {
 		t.Errorf("a failed create left state %v", state.Raw)
 	}
@@ -137,7 +137,34 @@ func TestScannerHubDeleteFailureIsAnError(t *testing.T) {
 	r := NewAWSScannerHubResource()
 	s := configured(t, r, c)
 
-	requireError(t, doDelete(t, r, s, hubModel("all", types.SetNull(types.StringType))), "403", "access to all accounts")
+	requireError(t, doDelete(t, r, s, hubModel("all", types.SetNull(types.StringType))), "403", "access to all accounts", "trial")
+}
+
+// A hub whose account is gone from Stream, or already turned off, has nothing
+// left to turn off: destroying it must not fail. Without an error the framework
+// removes it from state.
+func TestScannerHubDeleteOfAGoneHubWarns(t *testing.T) {
+	for _, status := range []int{404, 409} {
+		_, c := newFakeAPI(t, map[string]fakeResponse{"PUT " + hubPath: {status, `{"error":"gone"}`}})
+		r := NewAWSScannerHubResource()
+		s := configured(t, r, c)
+
+		diags := doDelete(t, r, s, hubModel("selected", stringSet("acc-a")))
+
+		if diags.HasError() || diags.WarningsCount() != 1 {
+			t.Errorf("status %d: diagnostics = %s, want one warning", status, diagsText(diags))
+		}
+	}
+}
+
+func TestScannerHubCreateBadRequestNamesTheFields(t *testing.T) {
+	_, c := newFakeAPI(t, map[string]fakeResponse{"PUT " + hubPath: {400, `{"error":"Request failed with status code 400"}`}})
+	r := NewAWSScannerHubResource()
+	s := configured(t, r, c)
+
+	_, diags := doCreate(t, r, s, hubModel("selected", stringSet("acc-x")))
+
+	requireError(t, diags, "400", "account_id", "account_ids")
 }
 
 const coverageBody = `{

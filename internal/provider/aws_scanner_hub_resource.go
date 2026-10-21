@@ -63,10 +63,10 @@ var scannerHubHints = statusHints{
 	http.StatusBadRequest: "Stream Security refused the coverage: account_id must be a connected AWS account, and each of " +
 		"account_ids a connected AWS account other than a hub. Both take Stream Security account ids " +
 		"(streamsec_aws_account.<name>.id), not 12-digit AWS account ids.",
-	http.StatusForbidden: "Changing what a scanner covers needs a token with access to all accounts.",
+	http.StatusForbidden: "Changing what a scanner covers needs a token with access to all accounts" + trialExpiredHint + ".",
 	http.StatusNotFound:  "account_id is not an account in Stream Security: it takes the Stream Security account id (streamsec_aws_account.<name>.id).",
-	http.StatusConflict: "Another account's scanner already scans all AWS accounts, or one of account_ids is already " +
-		"scanned by another hub. Change that hub's coverage first.",
+	http.StatusConflict: `Another account's scanner already scans all AWS accounts (only one hub may cover "all"), or one of ` +
+		"account_ids is already scanned by another hub. Change that hub's coverage first.",
 }
 
 func (r *AWSScannerHubResource) Metadata(ctx context.Context, req resource.MetadataRequest, resp *resource.MetadataResponse) {
@@ -215,7 +215,7 @@ func (r *AWSScannerHubResource) Delete(ctx context.Context, req resource.DeleteR
 	err := r.client.DoRESTRequest(ctx, http.MethodPut, client.AccountsPath(data.AccountID.ValueString(), "scanner-hub"),
 		map[string]string{"coverage": "none"}, nil)
 	if err != nil {
-		addAPIError(&resp.Diagnostics, "Unable to turn off the scanner hub", err, scannerHubHints)
+		addDeleteError(&resp.Diagnostics, "Unable to turn off the scanner hub", "Scanner hub already gone", err, scannerHubHints)
 	}
 }
 

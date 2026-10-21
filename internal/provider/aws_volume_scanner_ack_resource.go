@@ -48,10 +48,13 @@ type volumeScannerAckRequest struct {
 
 func volumeScannerAckHints(accountID string) statusHints {
 	return statusHints{
-		http.StatusForbidden: fmt.Sprintf("The token has no access to account %s.", accountID),
+		http.StatusBadRequest: "Stream Security refused region or module_version: region must be an AWS region, such as us-east-1, and " +
+			"module_version a version, such as 1.16.0 (a leading v and -pre or +build suffixes are allowed), of at most 64 characters.",
+		http.StatusForbidden: fmt.Sprintf("The token has no access to account %s%s.", accountID, trialExpiredHint),
 		http.StatusNotFound: fmt.Sprintf("Account %s is not in Stream Security: account_id takes the Stream Security account id "+
 			"(streamsec_aws_account.<name>.id), not the 12-digit AWS account id.", accountID),
-		http.StatusConflict: fmt.Sprintf("Account %s is not a connected AWS account in Stream Security.", accountID),
+		http.StatusConflict: fmt.Sprintf("Account %s is not a connected AWS account in Stream Security yet, or is being deleted: "+
+			"the scanner's install is acknowledged only after the account's own (streamsec_aws_account_ack).", accountID),
 	}
 }
 
@@ -137,19 +140,10 @@ func (r *AWSVolumeScannerAckResource) Delete(ctx context.Context, req resource.D
 	if resp.Diagnostics.HasError() {
 		return
 	}
-	err := r.acknowledge(ctx, data, "uninstalled")
-	if err == nil {
-		return
+	if err := r.acknowledge(ctx, data, "uninstalled"); err != nil {
+		addDeleteError(&resp.Diagnostics, "Unable to acknowledge the volume scanner uninstall", "Volume scanner uninstall not recorded",
+			err, volumeScannerAckHints(data.AccountID.ValueString()))
 	}
-	hints := volumeScannerAckHints(data.AccountID.ValueString())
-	if hasStatus(err, http.StatusNotFound, http.StatusConflict) {
-		// Nothing left in Stream Security to mark uninstalled; don't block the destroy.
-		resp.Diagnostics.AddWarning("Volume scanner uninstall not recorded",
-			fmt.Sprintf("Stream Security could not record the scanner in %s as uninstalled; it is removed from the Terraform state only.\n\n%s",
-				data.Region.ValueString(), hints.detail(err)))
-		return
-	}
-	addAPIError(&resp.Diagnostics, "Unable to acknowledge the volume scanner uninstall", err, hints)
 }
 
 func (r *AWSVolumeScannerAckResource) acknowledge(ctx context.Context, data AWSVolumeScannerAckResourceModel, status string) error {

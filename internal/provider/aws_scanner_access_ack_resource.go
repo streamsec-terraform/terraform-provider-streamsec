@@ -43,7 +43,8 @@ type scannerAccessAckRequest struct {
 
 func scannerAccessAckHints(hubAccountID string) statusHints {
 	return statusHints{
-		http.StatusForbidden: fmt.Sprintf("The token has no access to account %s.", hubAccountID),
+		http.StatusBadRequest: "Stream Security refused spoke_cloud_account_id: it must be a 12-digit AWS account id.",
+		http.StatusForbidden:  fmt.Sprintf("The token has no access to account %s%s.", hubAccountID, trialExpiredHint),
 		http.StatusNotFound: fmt.Sprintf("Account %s is not in Stream Security: hub_account_id takes the hub's Stream Security account id "+
 			"(streamsec_aws_account.<name>.id), not its 12-digit AWS account id.", hubAccountID),
 		http.StatusConflict: fmt.Sprintf("Account %s's scanner does not scan other accounts: make it a hub with streamsec_aws_scanner_hub first.", hubAccountID),
@@ -126,19 +127,10 @@ func (r *AWSScannerAccessAckResource) Delete(ctx context.Context, req resource.D
 	if resp.Diagnostics.HasError() {
 		return
 	}
-	err := r.acknowledge(ctx, data, "uninstalled")
-	if err == nil {
-		return
+	if err := r.acknowledge(ctx, data, "uninstalled"); err != nil {
+		addDeleteError(&resp.Diagnostics, "Unable to acknowledge the scanner access role uninstall", "Scanner access uninstall not recorded",
+			err, scannerAccessAckHints(data.HubAccountID.ValueString()))
 	}
-	hints := scannerAccessAckHints(data.HubAccountID.ValueString())
-	if hasStatus(err, http.StatusNotFound, http.StatusConflict) {
-		// The hub is gone or turned off; don't block destroying the spoke's role.
-		resp.Diagnostics.AddWarning("Scanner access uninstall not recorded",
-			fmt.Sprintf("Stream Security could not record the role in %s as uninstalled; it is removed from the Terraform state only.\n\n%s",
-				data.SpokeCloudAccountID.ValueString(), hints.detail(err)))
-		return
-	}
-	addAPIError(&resp.Diagnostics, "Unable to acknowledge the scanner access role uninstall", err, hints)
 }
 
 func (r *AWSScannerAccessAckResource) acknowledge(ctx context.Context, data AWSScannerAccessAckResourceModel, status string) error {

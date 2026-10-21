@@ -87,8 +87,11 @@ func TestVolumeScannerAckCreateErrors(t *testing.T) {
 		resp fakeResponse
 		want []string
 	}{
-		{"conflict explained", fakeResponse{409, `{"error":"Request failed with status code 409"}`}, []string{"409", "acc-1", "not a connected AWS account"}},
+		// The account is not live yet (or is being deleted).
+		{"conflict explained", fakeResponse{409, `{"error":"Request failed with status code 409"}`}, []string{"409", "acc-1", "not a connected AWS account", "streamsec_aws_account_ack"}},
 		{"not found explained", fakeResponse{404, `{"error":"Request failed with status code 404"}`}, []string{"404", "acc-1", "streamsec_aws_account"}},
+		{"bad request names the fields", fakeResponse{400, `{"error":"Request failed with status code 400"}`}, []string{"400", "region", "module_version"}},
+		{"forbidden explained", fakeResponse{403, `{"error":"Request failed with status code 403"}`}, []string{"403", "acc-1", "trial"}},
 		{"detail shown", fakeResponse{400, `{"detail":"invalid module_version"}`}, []string{"400", "invalid module_version"}},
 	}
 	for _, tc := range cases {

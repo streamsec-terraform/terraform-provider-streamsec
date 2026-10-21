@@ -3,6 +3,7 @@ package provider
 import (
 	"errors"
 	"fmt"
+	"net/http"
 
 	"terraform-provider-streamsec/internal/client"
 
@@ -40,6 +41,20 @@ func (h statusHints) detail(err error) string {
 func addAPIError(diags *diag.Diagnostics, summary string, err error, hints statusHints) {
 	diags.AddError(summary, hints.detail(err))
 }
+
+// addDeleteError reports a failed destroy call. An account gone from Stream Security,
+// or a hub already turned off (404, 409), has nothing left to undo, so it only
+// warns: an error would block the destroy and keep the resource in state.
+func addDeleteError(diags *diag.Diagnostics, errorSummary, goneSummary string, err error, hints statusHints) {
+	if hasStatus(err, http.StatusNotFound, http.StatusConflict) {
+		diags.AddWarning(goneSummary, "It is removed from the Terraform state only.\n\n"+hints.detail(err))
+		return
+	}
+	addAPIError(diags, errorSummary, err, hints)
+}
+
+// The front gate refuses changes, but not reads, in a workspace whose trial has expired.
+const trialExpiredHint = ", or the workspace's trial has expired (Stream Security then refuses changes)"
 
 func hasStatus(err error, statuses ...int) bool {
 	var apiErr *client.APIError
