@@ -82,9 +82,13 @@ func (a *fakeAPI) serve(w http.ResponseWriter, r *http.Request) {
 		a.t.Errorf("unexpected call %s %s", r.Method, r.RequestURI)
 		route = fakeResponse{http.StatusTeapot, `{"detail":"unexpected call"}`}
 	}
+	body := route.body
+	if strings.HasPrefix(r.RequestURI, "/api/") && route.status >= 200 && route.status <= 299 {
+		body = `{"status":"OK","data":` + body + `}`
+	}
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(route.status)
-	_, _ = w.Write([]byte(route.body))
+	_, _ = w.Write([]byte(body))
 }
 
 func (a *fakeAPI) recorded() []apiCall {

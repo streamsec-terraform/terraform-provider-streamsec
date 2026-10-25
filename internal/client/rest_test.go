@@ -55,9 +55,13 @@ func newRESTTestServer(t *testing.T, status int, response string) (*httptest.Ser
 		captured.mu.Lock()
 		captured.requests = append(captured.requests, capturedRequest{method: r.Method, uri: r.RequestURI, headers: r.Header.Clone(), body: body})
 		captured.mu.Unlock()
+		answer := response
+		if strings.HasPrefix(r.RequestURI, "/api/") && status >= 200 && status <= 299 {
+			answer = `{"status":"OK","data":` + answer + `}`
+		}
 		w.Header().Set("Content-Type", "application/json")
 		w.WriteHeader(status)
-		_, _ = w.Write([]byte(response))
+		_, _ = w.Write([]byte(answer))
 	}))
 	t.Cleanup(srv.Close)
 	return srv, captured

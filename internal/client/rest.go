@@ -98,7 +98,14 @@ func (c *Client) DoRESTRequest(ctx context.Context, method, path string, body, o
 		return &APIError{Method: method, Path: path, StatusCode: resp.StatusCode, Detail: errorDetail(respBody)}
 	}
 	if out != nil {
-		if err := json.NewDecoder(resp.Body).Decode(out); err != nil {
+		// Stream Security answers {"status": "OK", "data": <answer>}.
+		var envelope struct {
+			Data json.RawMessage `json:"data"`
+		}
+		if err := json.NewDecoder(resp.Body).Decode(&envelope); err != nil {
+			return fmt.Errorf("decoding the %s %s answer: %w", method, path, err)
+		}
+		if err := json.Unmarshal(envelope.Data, out); err != nil {
 			return fmt.Errorf("decoding the %s %s answer: %w", method, path, err)
 		}
 	}
