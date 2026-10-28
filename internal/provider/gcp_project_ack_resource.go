@@ -138,9 +138,15 @@ func (r *GCPProjectAckResource) Create(ctx context.Context, req resource.CreateR
 	for _, acc := range accounts {
 
 		account := acc.(map[string]interface{})
-		if account["cloud_account_id"].(string) == data.CloudAccountID.ValueString() {
-			data.ID = types.StringValue(account["_id"].(string))
-			data.AccountToken = types.StringValue(account["account_token"].(string))
+		if cloudAccountID, _ := account["cloud_account_id"].(string); cloudAccountID == data.CloudAccountID.ValueString() {
+			id, idOK := account["_id"].(string)
+			accountToken, tokenOK := account["account_token"].(string)
+			if !idOK || !tokenOK {
+				resp.Diagnostics.AddError("Incomplete account", fmt.Sprintf("Project %s was found in Stream.Security API without an id or account token.", data.CloudAccountID.ValueString()))
+				return
+			}
+			data.ID = types.StringValue(id)
+			data.AccountToken = types.StringValue(accountToken)
 			accountFound = true
 		}
 	}
@@ -228,14 +234,25 @@ func (r *GCPProjectAckResource) Read(ctx context.Context, req resource.ReadReque
 
 	accounts := res["accounts"].([]interface{})
 	accountFound := false
+	stateID := data.ID.ValueString()
 
 	for _, acc := range accounts {
 
 		account := acc.(map[string]interface{})
-		if account["cloud_account_id"].(string) == data.CloudAccountID.ValueString() {
-			data.AccountToken = types.StringValue(account["account_token"].(string))
-			data.ID = types.StringValue(account["_id"].(string))
-			data.ClientEmail = types.StringValue(account["client_email"].(string))
+		accountID, _ := account["_id"].(string)
+		cloudAccountID, _ := account["cloud_account_id"].(string)
+		if (stateID != "" && accountID == stateID) || (stateID == "" && cloudAccountID == data.CloudAccountID.ValueString()) {
+			clientEmail, ok := account["client_email"].(string)
+			if !ok || clientEmail == "" {
+				continue
+			}
+			if accountToken, ok := account["account_token"].(string); ok {
+				data.AccountToken = types.StringValue(accountToken)
+			}
+			if id, ok := account["_id"].(string); ok {
+				data.ID = types.StringValue(id)
+			}
+			data.ClientEmail = types.StringValue(clientEmail)
 			accountFound = true
 		}
 	}
