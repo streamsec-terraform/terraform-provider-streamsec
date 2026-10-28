@@ -268,6 +268,60 @@ func TestScannerHubPlanReplacesOnIdentityChanges(t *testing.T) {
 	}
 }
 
+// volume-scanner-access depends on its hub, so while the hub has changes Terraform reads the
+// module's data sources at apply and spoke_cloud_account_id is unknown at plan. That alone
+// must not replace the ack, which would record the spoke's access removed, then deployed.
+func TestScannerAccessAckPlanKeepsSpokeWhileUnknown(t *testing.T) {
+	server, resp := protocolServer(t)
+	schema := resp.ResourceSchemas["streamsec_aws_scanner_access_ack"]
+	unknown := tftypes.NewValue(tftypes.String, tftypes.UnknownValue)
+	config := objectValue(t, schema, map[string]tftypes.Value{"hub_account_id": str("hub-1"), "spoke_cloud_account_id": unknown})
+
+	cases := []struct {
+		name      string
+		prior     tftypes.Value
+		wantSpoke tftypes.Value
+	}{
+		{"existing ack keeps its spoke", tftypes.NewValue(schema.ValueType(), map[string]tftypes.Value{
+			"hub_account_id": str("hub-1"), "spoke_cloud_account_id": str("444455556666"),
+		}), str("444455556666")},
+		// Also how Terraform plans the new object of a replacement.
+		{"new ack waits for apply", tftypes.NewValue(schema.ValueType(), nil), unknown},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			prior, err := tfprotov6.NewDynamicValue(schema.ValueType(), tc.prior)
+			if err != nil {
+				t.Fatalf("NewDynamicValue: %s", err)
+			}
+			out, err := server.PlanResourceChange(context.Background(), &tfprotov6.PlanResourceChangeRequest{
+				TypeName:         "streamsec_aws_scanner_access_ack",
+				PriorState:       &prior,
+				ProposedNewState: config,
+				Config:           config,
+			})
+			if err != nil {
+				t.Fatalf("PlanResourceChange: %s", err)
+			}
+			requireNoProtocolErrors(t, out.Diagnostics)
+			if len(out.RequiresReplace) > 0 {
+				t.Errorf("RequiresReplace = %v, want none", out.RequiresReplace)
+			}
+			planned, err := out.PlannedState.Unmarshal(schema.ValueType())
+			if err != nil {
+				t.Fatalf("Unmarshal: %s", err)
+			}
+			var attrs map[string]tftypes.Value
+			if err := planned.As(&attrs); err != nil {
+				t.Fatalf("As: %s", err)
+			}
+			if !attrs["spoke_cloud_account_id"].Equal(tc.wantSpoke) {
+				t.Errorf("planned spoke_cloud_account_id = %s, want %s", attrs["spoke_cloud_account_id"], tc.wantSpoke)
+			}
+		})
+	}
+}
+
 func TestScannerHubImportThroughTheProvider(t *testing.T) {
 	server, resp := protocolServer(t)
 
