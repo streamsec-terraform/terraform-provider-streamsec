@@ -53,15 +53,15 @@ func scannerAccessAckHints(hubAccountID string) statusHints {
 }
 
 // keepSpokeWhileUnknown plans the spoke id in state while the configured one is unknown, so
-// RequiresReplace after it doesn't replace the ack. volume-scanner-access depends on its hub,
-// so whenever the hub has changes Terraform reads the module's data sources at apply and the
-// spoke's caller identity is unknown at plan. The framework's UseStateForUnknown skips
-// unknown config values.
+// RequiresReplace after it doesn't replace the ack. volume-scanner-access is used with
+// depends_on on its hub, so whenever the hub has changes Terraform reads the module's data
+// sources at apply and the spoke's caller identity is unknown at plan. The framework's
+// UseStateForUnknown skips unknown config values.
 //
-// The ack then plans no change, and Terraform doesn't touch it at apply. Should the account
-// id turn out different, the next plan replaces the ack: the old spoke's access reported
-// uninstalled, the new one's deployed. A replacement (hub_account_id changed) is planned
-// without prior state, so its spoke id stays unknown.
+// The ack then plans no change, showing the id in state, and Terraform doesn't touch it at
+// apply. Should the account id turn out different, the first plan that knows it replaces the
+// ack: the old spoke's access reported uninstalled, the new one's deployed. A replacement
+// (hub_account_id changed) is planned without prior state, so its spoke id stays unknown.
 type keepSpokeWhileUnknown struct{}
 
 func (keepSpokeWhileUnknown) Description(ctx context.Context) string {
