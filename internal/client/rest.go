@@ -43,7 +43,7 @@ func (e *APIError) Error() string {
 	return msg
 }
 
-// AccountsPath is the front gate's REST path to an accounts service /accounts route,
+// AccountsPath is the front gate's REST path to one of the accounts service's /accounts routes,
 // /api/accounts/accounts/<segments>, with each segment escaped.
 func AccountsPath(segments ...string) string {
 	escaped := make([]string, len(segments))
