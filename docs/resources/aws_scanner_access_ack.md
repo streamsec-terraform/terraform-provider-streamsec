@@ -29,4 +29,4 @@ resource "streamsec_aws_scanner_access_ack" "dev" {
 ### Required
 
 - `hub_account_id` (String) The Stream Security id of the hub's AWS account (`streamsec_aws_scanner_hub.<name>.account_id`). Changing it replaces the resource.
-- `spoke_cloud_account_id` (String) The 12-digit AWS account id of the spoke the role is in. Changing it replaces the resource.
+- `spoke_cloud_account_id` (String) The 12-digit AWS account id of the spoke the role is in. Changing it replaces the resource; while it is unknown at plan, the id in state is kept.

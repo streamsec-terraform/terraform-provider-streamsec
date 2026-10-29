@@ -52,6 +52,33 @@ func scannerAccessAckHints(hubAccountID string) statusHints {
 	}
 }
 
+// keepSpokeWhileUnknown plans the spoke id in state while the configured one is unknown, so
+// RequiresReplace after it doesn't replace the ack. volume-scanner-access is used with
+// depends_on on its hub, so whenever the hub has changes Terraform reads the module's data
+// sources at apply and the spoke's caller identity is unknown at plan. The framework's
+// UseStateForUnknown skips unknown config values.
+//
+// The ack then plans no change, showing the id in state, and Terraform doesn't touch it at
+// apply. Should the account id turn out different, the first plan that knows it replaces the
+// ack: the old spoke's access reported uninstalled, the new one's deployed. A replacement
+// (hub_account_id changed) is planned without prior state, so its spoke id stays unknown.
+type keepSpokeWhileUnknown struct{}
+
+func (keepSpokeWhileUnknown) Description(ctx context.Context) string {
+	return "Keeps the spoke id in state while the configured one is unknown."
+}
+
+func (m keepSpokeWhileUnknown) MarkdownDescription(ctx context.Context) string {
+	return m.Description(ctx)
+}
+
+func (keepSpokeWhileUnknown) PlanModifyString(ctx context.Context, req planmodifier.StringRequest, resp *planmodifier.StringResponse) {
+	if req.StateValue.IsNull() || !req.ConfigValue.IsUnknown() {
+		return
+	}
+	resp.PlanValue = req.StateValue
+}
+
 func (r *AWSScannerAccessAckResource) Metadata(ctx context.Context, req resource.MetadataRequest, resp *resource.MetadataResponse) {
 	resp.TypeName = req.ProviderTypeName + "_aws_scanner_access_ack"
 }
@@ -74,9 +101,11 @@ func (r *AWSScannerAccessAckResource) Schema(ctx context.Context, req resource.S
 				},
 			},
 			"spoke_cloud_account_id": schema.StringAttribute{
-				MarkdownDescription: "The 12-digit AWS account id of the spoke the role is in. Changing it replaces the resource.",
-				Required:            true,
+				MarkdownDescription: "The 12-digit AWS account id of the spoke the role is in. Changing it replaces the resource; " +
+					"while it is unknown at plan, the id in state is kept.",
+				Required: true,
 				PlanModifiers: []planmodifier.String{
+					keepSpokeWhileUnknown{},
 					stringplanmodifier.RequiresReplace(),
 				},
 				Validators: []validator.String{

@@ -268,6 +268,74 @@ func TestScannerHubPlanReplacesOnIdentityChanges(t *testing.T) {
 	}
 }
 
+// volume-scanner-access is used with depends_on on its hub, so while the hub has changes
+// Terraform reads the module's data sources at apply and spoke_cloud_account_id is unknown at
+// plan. That alone must not replace the ack, which would record the spoke's access removed,
+// then deployed.
+func TestScannerAccessAckPlanKeepsSpokeWhileUnknown(t *testing.T) {
+	server, resp := protocolServer(t)
+	schema := resp.ResourceSchemas["streamsec_aws_scanner_access_ack"]
+	unknown := tftypes.NewValue(tftypes.String, tftypes.UnknownValue)
+	existing := tftypes.NewValue(schema.ValueType(), map[string]tftypes.Value{
+		"hub_account_id": str("hub-1"), "spoke_cloud_account_id": str("444455556666"),
+	})
+
+	cases := []struct {
+		name        string
+		prior       tftypes.Value
+		hub         string
+		wantReplace string // "" = no replacement
+		wantSpoke   tftypes.Value
+	}{
+		{"existing ack keeps its spoke", existing, "hub-1", "", str("444455556666")},
+		// Only the hub forces it; Terraform then plans the new object as below.
+		{"new hub replaces the ack", existing, "hub-2", "hub_account_id", str("444455556666")},
+		// Also how Terraform plans the new object of a replacement.
+		{"new ack waits for apply", tftypes.NewValue(schema.ValueType(), nil), "hub-1", "", unknown},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			prior, err := tfprotov6.NewDynamicValue(schema.ValueType(), tc.prior)
+			if err != nil {
+				t.Fatalf("NewDynamicValue: %s", err)
+			}
+			config := objectValue(t, schema, map[string]tftypes.Value{"hub_account_id": str(tc.hub), "spoke_cloud_account_id": unknown})
+			out, err := server.PlanResourceChange(context.Background(), &tfprotov6.PlanResourceChangeRequest{
+				TypeName:         "streamsec_aws_scanner_access_ack",
+				PriorState:       &prior,
+				ProposedNewState: config,
+				Config:           config,
+			})
+			if err != nil {
+				t.Fatalf("PlanResourceChange: %s", err)
+			}
+			requireNoProtocolErrors(t, out.Diagnostics)
+			var replace []string
+			for _, p := range out.RequiresReplace {
+				replace = append(replace, p.String())
+			}
+			if tc.wantReplace == "" && len(replace) > 0 {
+				t.Errorf("RequiresReplace = %v, want none", replace)
+			}
+			if tc.wantReplace != "" && (len(out.RequiresReplace) != 1 ||
+				!out.RequiresReplace[0].Equal(tftypes.NewAttributePath().WithAttributeName(tc.wantReplace))) {
+				t.Errorf("RequiresReplace = %v, want [%s]", replace, tc.wantReplace)
+			}
+			planned, err := out.PlannedState.Unmarshal(schema.ValueType())
+			if err != nil {
+				t.Fatalf("Unmarshal: %s", err)
+			}
+			var attrs map[string]tftypes.Value
+			if err := planned.As(&attrs); err != nil {
+				t.Fatalf("As: %s", err)
+			}
+			if !attrs["spoke_cloud_account_id"].Equal(tc.wantSpoke) {
+				t.Errorf("planned spoke_cloud_account_id = %s, want %s", attrs["spoke_cloud_account_id"], tc.wantSpoke)
+			}
+		})
+	}
+}
+
 func TestScannerHubImportThroughTheProvider(t *testing.T) {
 	server, resp := protocolServer(t)
 
