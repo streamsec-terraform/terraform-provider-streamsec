@@ -20,10 +20,10 @@ import (
 var _ resource.Resource = &AWSVolumeScannerAckResource{}
 var _ resource.ResourceWithConfigure = &AWSVolumeScannerAckResource{}
 
-// The shape ms_accounts accepts (its _AWS_REGION_RE), not a list of regions.
+// The region shape the accounts service accepts, not a list of regions.
 var awsRegionPattern = regexp.MustCompile(`^[a-z]{2,4}(-[a-z]{1,16}){1,3}-[0-9]{1,2}$`)
 
-// ms_accounts' _TERRAFORM_MODULE_VERSION_RE, which it matches whole, up to 64 characters.
+// The module version shape the accounts service accepts, matched whole, up to 64 characters.
 var moduleVersionPattern = regexp.MustCompile(`^v?[0-9]+\.[0-9]+\.[0-9]+(-[0-9A-Za-z.-]+)?(\+[0-9A-Za-z.-]+)?$`)
 
 func NewAWSVolumeScannerAckResource() resource.Resource {

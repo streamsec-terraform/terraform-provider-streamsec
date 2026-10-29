@@ -33,7 +33,7 @@ func NewAWSScannerHubResource() resource.Resource {
 }
 
 // AWSScannerHubResource makes an AWS account's agentless scanner a hub that also
-// scans other AWS accounts (DEV-23499), through ms_accounts' scanner-hub routes.
+// scans other AWS accounts, through the accounts service's scanner-hub routes.
 type AWSScannerHubResource struct {
 	client *client.Client
 }
@@ -164,7 +164,7 @@ func (r *AWSScannerHubResource) Create(ctx context.Context, req resource.CreateR
 // awsAccountCheckTimeout bounds requireAWSAccount's query: the GraphQL client has no timeout.
 var awsAccountCheckTimeout = time.Minute
 
-// requireAWSAccount refuses an account that is not AWS. ms_accounts takes a hub's cloud
+// requireAWSAccount refuses an account that is not AWS. The accounts service takes a hub's cloud
 // from its account, so a GCP project's id would make a GCP hub, which Read (AWS hubs
 // only) never finds and destroy never turns off. account_id replaces the resource, so
 // Create is the only place it can change.

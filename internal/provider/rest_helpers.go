@@ -27,7 +27,7 @@ func providerClient(providerData interface{}, diags *diag.Diagnostics) *client.C
 }
 
 // statusHints says what an HTTP status means for one call. Through the front gate a
-// failed call arrives without ms_accounts' own reason, so the hint is all the user gets.
+// failed call arrives without the accounts service's own reason, so the hint is all the user gets.
 type statusHints map[int]string
 
 func (h statusHints) detail(err error) string {
