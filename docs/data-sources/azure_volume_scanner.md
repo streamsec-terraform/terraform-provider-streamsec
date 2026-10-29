@@ -3,22 +3,23 @@
 page_title: "streamsec_azure_volume_scanner Data Source - streamsec"
 subcategory: ""
 description: |-
-  What the agentless volume scanner in an Azure subscription needs from Stream Security: the subscription's collection token, which the scanner reports and uploads with. The same token the console's ARM template carries.
+  What the agentless volume scanner in an Azure subscription needs from Stream Security: the collection token Stream Security keeps for the subscription, which the scanner reports and uploads with. It is made on the first read and stays the same, for a scanner installed from the console too. Needs a token that is not read-only.
 ---
 
 # streamsec_azure_volume_scanner (Data Source)
 
-What the agentless volume scanner in an Azure subscription needs from Stream Security: the subscription's collection token, which the scanner reports and uploads with. The same token the console's ARM template carries.
+What the agentless volume scanner in an Azure subscription needs from Stream Security: the collection token Stream Security keeps for the subscription, which the scanner reports and uploads with. It is made on the first read and stays the same, for a scanner installed from the console too. Needs a token that is not read-only.
 
 ## Example Usage
 
 ```terraform
 # The collection token the scanner's jobs in the production subscription report
-# and upload with. The volume-scanner module of terraform-streamsec-azure-tenant
-# keeps it as a Container Apps job secret.
+# and upload with, for example as a Container Apps job secret.
 data "streamsec_azure_volume_scanner" "production" {
-  tenant_id       = streamsec_azure_tenant.main.id
+  account_id      = streamsec_azure_tenant.main.id
   subscription_id = "00000000-0000-0000-0000-000000000000"
+
+  depends_on = [streamsec_azure_tenant_ack.main]
 }
 ```
 
@@ -27,8 +28,8 @@ data "streamsec_azure_volume_scanner" "production" {
 
 ### Required
 
-- `subscription_id` (String) The Azure subscription the scanner runs in, one of the tenant's subscriptions in Stream Security.
-- `tenant_id` (String) The Stream Security id of the Azure tenant (`streamsec_azure_tenant.<name>.id`).
+- `account_id` (String) The Stream Security id of the Azure tenant (`streamsec_azure_tenant.<name>.id`), not the Azure tenant id.
+- `subscription_id` (String) The Azure subscription the scanner runs in, one of the tenant's subscriptions in Stream Security, in lowercase.
 
 ### Read-Only
 

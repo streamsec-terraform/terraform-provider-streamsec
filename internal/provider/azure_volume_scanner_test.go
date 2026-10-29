@@ -3,6 +3,7 @@ package provider
 import (
 	"context"
 	"net/http"
+	"strings"
 	"testing"
 
 	"github.com/hashicorp/terraform-plugin-framework/datasource"
@@ -15,14 +16,15 @@ import (
 )
 
 const (
+	azureAccount           = "64b7f9a1c2d3e4f5a6b7c8d9"
 	azureSubscription      = "00000000-1111-2222-3333-444444444444"
-	azureAckPath           = "/api/accounts/accounts/tenant-1/azure-scanner-terraform-acknowledge"
-	azureScannerParamsPath = "/api/accounts/accounts/tenant-1/azure-scanner-terraform-params?subscription_id=" + azureSubscription
+	azureAckPath           = "/api/accounts/accounts/" + azureAccount + "/azure-scanner-terraform-acknowledge"
+	azureScannerParamsPath = "/api/accounts/accounts/" + azureAccount + "/azure-scanner-terraform-params?subscription_id=" + azureSubscription
 )
 
 func azureAckModel(moduleVersion string, resourceGroup types.String) AzureVolumeScannerAckResourceModel {
 	return AzureVolumeScannerAckResourceModel{
-		TenantID:       types.StringValue("tenant-1"),
+		AccountID:      types.StringValue(azureAccount),
 		SubscriptionID: types.StringValue(azureSubscription),
 		ModuleVersion:  types.StringValue(moduleVersion),
 		ResourceGroup:  resourceGroup,
@@ -116,10 +118,10 @@ func TestAzureVolumeScannerAckCreateErrors(t *testing.T) {
 		resp fakeResponse
 		want []string
 	}{
-		{"conflict explained", fakeResponse{409, `{"error":"Request failed with status code 409"}`}, []string{"409", "tenant-1", "streamsec_azure_tenant_ack"}},
-		{"not found explained", fakeResponse{404, `{"error":"Request failed with status code 404"}`}, []string{"404", "tenant-1", azureSubscription, "streamsec_azure_tenant"}},
+		{"conflict explained", fakeResponse{409, `{"error":"Request failed with status code 409"}`}, []string{"409", azureAccount, "streamsec_azure_tenant_ack"}},
+		{"not found explained", fakeResponse{404, `{"error":"Request failed with status code 404"}`}, []string{"404", azureAccount, azureSubscription, "streamsec_azure_tenant"}},
 		{"bad request names the fields", fakeResponse{400, `{"error":"Request failed with status code 400"}`}, []string{"400", "subscription_id", "module_version"}},
-		{"forbidden explained", fakeResponse{403, `{"error":"Request failed with status code 403"}`}, []string{"403", "tenant-1", "trial"}},
+		{"forbidden explained", fakeResponse{403, `{"error":"Request failed with status code 403"}`}, []string{"403", azureAccount, "read-only", "trial"}},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
@@ -166,7 +168,7 @@ func readAzureVolumeScanner(t *testing.T, c *client.Client) (AzureVolumeScannerD
 
 	config := tfsdk.State{Schema: s, Raw: tftypes.NewValue(s.Type().TerraformType(ctx), nil)}
 	requireNoDiags(t, config.Set(ctx, AzureVolumeScannerDataSourceModel{
-		TenantID:        types.StringValue("tenant-1"),
+		AccountID:       types.StringValue(azureAccount),
 		SubscriptionID:  types.StringValue(azureSubscription),
 		CollectionToken: types.StringNull(),
 	}))
@@ -194,9 +196,28 @@ func TestAzureVolumeScannerReadsTheSubscriptionsCollectionToken(t *testing.T) {
 }
 
 func TestAzureVolumeScannerReadErrorsAreExplained(t *testing.T) {
-	_, c := newFakeAPI(t, map[string]fakeResponse{"GET " + azureScannerParamsPath: {404, `{"error":"Request failed with status code 404"}`}})
+	cases := []struct {
+		name string
+		resp fakeResponse
+		want []string
+	}{
+		{"not found", fakeResponse{404, `{"error":"Request failed with status code 404"}`}, []string{"404", azureAccount, azureSubscription, "streamsec_azure_tenant"}},
+		// Expected on a first apply that reads it before the tenant is connected.
+		{"conflict", fakeResponse{409, `{"error":"Request failed with status code 409"}`}, []string{"409", azureAccount, "depends_on", "streamsec_azure_tenant_ack"}},
+		{"forbidden", fakeResponse{403, `{"error":"Request failed with status code 403"}`}, []string{"403", azureAccount, "read-only"}},
+		{"bad request", fakeResponse{400, `{"error":"Request failed with status code 400"}`}, []string{"400", "subscription_id"}},
+		{"no token", fakeResponse{200, `{"subscription_id":"` + azureSubscription + `"}`}, []string{"no collection token", azureSubscription}},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			_, c := newFakeAPI(t, map[string]fakeResponse{"GET " + azureScannerParamsPath: tc.resp})
 
-	_, diags := readAzureVolumeScanner(t, c)
+			_, diags := readAzureVolumeScanner(t, c)
 
-	requireError(t, diags, "404", "tenant-1", azureSubscription, "streamsec_azure_tenant")
+			requireError(t, diags, tc.want...)
+			if strings.Contains(diagsText(diags), "trial") || strings.Contains(diagsText(diags), "module_version") {
+				t.Errorf("a read's error names what only the acknowledgement takes: %s", diagsText(diags))
+			}
+		})
+	}
 }

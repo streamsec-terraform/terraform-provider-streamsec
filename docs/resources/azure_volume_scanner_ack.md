@@ -13,10 +13,10 @@ Acknowledges a Terraform install of the agentless volume scanner in one Azure su
 ## Example Usage
 
 ```terraform
-# The volume-scanner module of terraform-streamsec-azure-tenant creates this once
-# the scanner is installed in the subscription.
+# A Terraform install of the volume scanner in the production subscription
+# creates this once the scanner's resources exist.
 resource "streamsec_azure_volume_scanner_ack" "production" {
-  tenant_id       = streamsec_azure_tenant.main.id
+  account_id      = streamsec_azure_tenant.main.id
   subscription_id = "00000000-0000-0000-0000-000000000000"
   module_version  = "1.6.0"
   resource_group  = "streamsec-scanner-tf-00000000"
@@ -28,10 +28,10 @@ resource "streamsec_azure_volume_scanner_ack" "production" {
 
 ### Required
 
+- `account_id` (String) The Stream Security id of the Azure tenant (`streamsec_azure_tenant.<name>.id`), not the Azure tenant id. Changing it replaces the resource; while it is unknown at plan, the value in state is kept.
 - `module_version` (String) The version of the Terraform module that installed the scanner: `MAJOR.MINOR.PATCH`, with an optional leading `v` and `-pre` or `+build` suffixes, at most 64 characters.
-- `subscription_id` (String) The Azure subscription the scanner is installed in, one of the tenant's subscriptions in Stream Security. Changing it replaces the resource.
-- `tenant_id` (String) The Stream Security id of the Azure tenant (`streamsec_azure_tenant.<name>.id`). Changing it replaces the resource.
+- `subscription_id` (String) The Azure subscription the scanner is installed in, one of the tenant's subscriptions in Stream Security, in lowercase. Changing it replaces the resource; while it is unknown at plan, the value in state is kept.
 
 ### Optional
 
-- `resource_group` (String) The resource group the scanner's resources are in, shown in Stream Security.
+- `resource_group` (String) The resource group the scanner's resources are in, shown in Stream Security. Leaving it out clears it there.

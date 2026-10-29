@@ -20,8 +20,14 @@ import (
 var _ resource.Resource = &AzureVolumeScannerAckResource{}
 var _ resource.ResourceWithConfigure = &AzureVolumeScannerAckResource{}
 
-// An Azure subscription id, as Stream Security matches it whole.
-var azureSubscriptionPattern = regexp.MustCompile(`^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$`)
+var (
+	// A Stream Security account id, which the Azure tenant's own GUID is not.
+	streamsecAccountIDPattern = regexp.MustCompile(`^[0-9a-f]{24}$`)
+	// An Azure subscription id as Azure writes it, lowercase: Stream Security matches it exactly.
+	azureSubscriptionPattern = regexp.MustCompile(`^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$`)
+	// An Azure resource group name: letters, digits, underscores, periods, parentheses and hyphens.
+	azureResourceGroupPattern = regexp.MustCompile(`^[\p{L}\p{N}_.()-]+$`)
+)
 
 func NewAzureVolumeScannerAckResource() resource.Resource {
 	return &AzureVolumeScannerAckResource{}
@@ -35,7 +41,7 @@ type AzureVolumeScannerAckResource struct {
 }
 
 type AzureVolumeScannerAckResourceModel struct {
-	TenantID       types.String `tfsdk:"tenant_id"`
+	AccountID      types.String `tfsdk:"account_id"`
 	SubscriptionID types.String `tfsdk:"subscription_id"`
 	ModuleVersion  types.String `tfsdk:"module_version"`
 	ResourceGroup  types.String `tfsdk:"resource_group"`
@@ -48,16 +54,16 @@ type azureVolumeScannerAckRequest struct {
 	ResourceGroup  string `json:"resource_group,omitempty"`
 }
 
-func azureVolumeScannerHints(tenantID, subscriptionID string) statusHints {
+func azureVolumeScannerAckHints(accountID, subscriptionID string) statusHints {
 	return statusHints{
 		http.StatusBadRequest: "Stream Security refused subscription_id or module_version: subscription_id must be an Azure subscription id, " +
 			"and module_version a version, such as 1.6.0 (a leading v and -pre or +build suffixes are allowed), of at most 64 characters.",
-		http.StatusForbidden: fmt.Sprintf("The token has no access to Azure tenant %s%s.", tenantID, trialExpiredHint),
+		http.StatusForbidden: fmt.Sprintf("The token has no access to Azure tenant %s or subscription %s, or is read-only%s.",
+			accountID, subscriptionID, trialExpiredHint),
 		http.StatusNotFound: fmt.Sprintf("Either tenant %s is not in Stream Security, or subscription %s is not one of its subscriptions: "+
-			"tenant_id takes the Stream Security id of the tenant (streamsec_azure_tenant.<name>.id), not the Azure tenant id.",
-			tenantID, subscriptionID),
+			"account_id takes the Stream Security id of the tenant (streamsec_azure_tenant.<name>.id).", accountID, subscriptionID),
 		http.StatusConflict: fmt.Sprintf("Azure tenant %s is not connected to Stream Security yet, or is being deleted: "+
-			"the scanner is acknowledged only after the tenant's own (streamsec_azure_tenant_ack).", tenantID),
+			"the scanner is acknowledged only after the tenant's own (streamsec_azure_tenant_ack).", accountID),
 	}
 }
 
@@ -72,25 +78,31 @@ func (r *AzureVolumeScannerAckResource) Schema(ctx context.Context, req resource
 			"collection token (`streamsec_azure_volume_scanner`). Destroying it reports the scanner uninstalled.",
 
 		Attributes: map[string]schema.Attribute{
-			"tenant_id": schema.StringAttribute{
-				MarkdownDescription: "The Stream Security id of the Azure tenant (`streamsec_azure_tenant.<name>.id`). Changing it replaces the resource.",
-				Required:            true,
+			"account_id": schema.StringAttribute{
+				MarkdownDescription: "The Stream Security id of the Azure tenant (`streamsec_azure_tenant.<name>.id`), not the Azure tenant id. " +
+					"Changing it replaces the resource; while it is unknown at plan, the value in state is kept.",
+				Required: true,
 				PlanModifiers: []planmodifier.String{
+					// As the access ack's spoke id: a module derives these from data sources, which a
+					// depends_on defers to apply whenever what it depends on has changes.
+					keepSpokeWhileUnknown{},
 					stringplanmodifier.RequiresReplace(),
 				},
 				Validators: []validator.String{
-					stringvalidator.LengthAtLeast(1),
+					stringvalidator.RegexMatches(streamsecAccountIDPattern,
+						"must be the Stream Security id of the tenant (streamsec_azure_tenant.<name>.id), not the Azure tenant id"),
 				},
 			},
 			"subscription_id": schema.StringAttribute{
-				MarkdownDescription: "The Azure subscription the scanner is installed in, one of the tenant's subscriptions in Stream Security. " +
-					"Changing it replaces the resource.",
+				MarkdownDescription: "The Azure subscription the scanner is installed in, one of the tenant's subscriptions in Stream Security, " +
+					"in lowercase. Changing it replaces the resource; while it is unknown at plan, the value in state is kept.",
 				Required: true,
 				PlanModifiers: []planmodifier.String{
+					keepSpokeWhileUnknown{},
 					stringplanmodifier.RequiresReplace(),
 				},
 				Validators: []validator.String{
-					stringvalidator.RegexMatches(azureSubscriptionPattern, "must be an Azure subscription id"),
+					stringvalidator.RegexMatches(azureSubscriptionPattern, "must be an Azure subscription id, in lowercase"),
 				},
 			},
 			"module_version": schema.StringAttribute{
@@ -103,10 +115,12 @@ func (r *AzureVolumeScannerAckResource) Schema(ctx context.Context, req resource
 				},
 			},
 			"resource_group": schema.StringAttribute{
-				MarkdownDescription: "The resource group the scanner's resources are in, shown in Stream Security.",
+				MarkdownDescription: "The resource group the scanner's resources are in, shown in Stream Security. Leaving it out clears it there.",
 				Optional:            true,
 				Validators: []validator.String{
-					stringvalidator.LengthBetween(1, 90),
+					stringvalidator.UTF8LengthBetween(1, 90),
+					stringvalidator.RegexMatches(azureResourceGroupPattern,
+						"must be an Azure resource group name: letters, digits, underscores, periods, parentheses and hyphens"),
 				},
 			},
 		},
@@ -160,12 +174,12 @@ func (r *AzureVolumeScannerAckResource) Delete(ctx context.Context, req resource
 }
 
 func (r *AzureVolumeScannerAckResource) hints(data AzureVolumeScannerAckResourceModel) statusHints {
-	return azureVolumeScannerHints(data.TenantID.ValueString(), data.SubscriptionID.ValueString())
+	return azureVolumeScannerAckHints(data.AccountID.ValueString(), data.SubscriptionID.ValueString())
 }
 
 func (r *AzureVolumeScannerAckResource) acknowledge(ctx context.Context, data AzureVolumeScannerAckResourceModel, status string) error {
 	return r.client.DoRESTRequest(ctx, http.MethodPut,
-		client.AccountsPath(data.TenantID.ValueString(), "azure-scanner-terraform-acknowledge"),
+		client.AccountsPath(data.AccountID.ValueString(), "azure-scanner-terraform-acknowledge"),
 		azureVolumeScannerAckRequest{
 			SubscriptionID: data.SubscriptionID.ValueString(),
 			Status:         status,
