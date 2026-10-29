@@ -51,7 +51,8 @@ func TestAzureVolumeScannerAckCreateAcknowledgesDeployed(t *testing.T) {
 	}
 }
 
-// Without a resource group the body leaves it out, so Stream Security keeps what it has.
+// Without a resource group the body leaves it out, and Stream Security clears the one it had:
+// the acknowledgement records only the group it is sent.
 func TestAzureVolumeScannerAckWithoutAResourceGroupSendsNone(t *testing.T) {
 	api, c := newFakeAPI(t, map[string]fakeResponse{"PUT " + azureAckPath: {200, `{}`}})
 	r := NewAzureVolumeScannerAckResource()

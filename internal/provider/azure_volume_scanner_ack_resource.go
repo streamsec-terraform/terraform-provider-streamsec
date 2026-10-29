@@ -115,7 +115,7 @@ func (r *AzureVolumeScannerAckResource) Schema(ctx context.Context, req resource
 				},
 			},
 			"resource_group": schema.StringAttribute{
-				MarkdownDescription: "The resource group the scanner's resources are in, shown in Stream Security. Leaving it out clears it there.",
+				MarkdownDescription: "The resource group the scanner's resources are in, shown in Stream Security. Each acknowledgement records only the group it is sent, so leaving it out clears it there.",
 				Optional:            true,
 				Validators: []validator.String{
 					stringvalidator.UTF8LengthBetween(1, 90),
