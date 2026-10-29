@@ -103,7 +103,7 @@ func TestScannerHubCreateAllSendsNoAccounts(t *testing.T) {
 }
 
 func TestScannerHubCreateConflictIsExplained(t *testing.T) {
-	// Through the front gate a 409 arrives without ms_accounts' detail.
+	// Through the front gate a 409 arrives without the accounts service's detail.
 	_, c := newFakeAPI(t, createRoutes(fakeResponse{409, `{"error":"Request failed with status code 409"}`}))
 	r := NewAWSScannerHubResource()
 	s := configured(t, r, c)

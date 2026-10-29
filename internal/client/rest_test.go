@@ -173,7 +173,7 @@ func TestDoRESTRequestNon2xxIsAPIErrorWithDetail(t *testing.T) {
 		body       string
 		wantDetail string
 	}{
-		{"ms_accounts detail", http.StatusConflict, `{"detail":"Account x's scanner already scans all AWS accounts"}`, "Account x's scanner already scans all AWS accounts"},
+		{"accounts service detail", http.StatusConflict, `{"detail":"Account x's scanner already scans all AWS accounts"}`, "Account x's scanner already scans all AWS accounts"},
 		// The front gate answers a failed proxied call with {"error": ...}.
 		{"front gate error", http.StatusConflict, `{"error":"Request failed with status code 409"}`, "Request failed with status code 409"},
 		{"validation detail list", http.StatusUnprocessableEntity, `{"detail":[{"loc":["body"],"msg":"field required"}]}`, `[{"loc":["body"],"msg":"field required"}]`},

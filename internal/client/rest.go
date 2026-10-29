@@ -31,7 +31,7 @@ type APIError struct {
 	Method     string
 	Path       string
 	StatusCode int
-	// Detail is the reason given: ms_accounts' "detail", the front gate's "error", or the body itself.
+	// Detail is the reason given: the accounts service's "detail", the front gate's "error", or the body itself.
 	Detail string
 }
 
@@ -43,7 +43,7 @@ func (e *APIError) Error() string {
 	return msg
 }
 
-// AccountsPath is the front gate's REST path to an ms_accounts /accounts route,
+// AccountsPath is the front gate's REST path to an accounts service /accounts route,
 // /api/accounts/accounts/<segments>, with each segment escaped.
 func AccountsPath(segments ...string) string {
 	escaped := make([]string, len(segments))
