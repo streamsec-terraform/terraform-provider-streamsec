@@ -41,8 +41,8 @@ func setStrings(t *testing.T, set types.Set) []string {
 	return out
 }
 
-func hubModel(coverage string, accountIDs types.Set) AWSScannerHubResourceModel {
-	return AWSScannerHubResourceModel{
+func hubModel(coverage string, accountIDs types.Set) ScannerHubResourceModel {
+	return ScannerHubResourceModel{
 		AccountID:  types.StringValue("hub-1"),
 		Coverage:   types.StringValue(coverage),
 		AccountIDs: accountIDs,
@@ -74,7 +74,7 @@ func TestScannerHubCreateSelectedPutsCoverageAndAccounts(t *testing.T) {
 	api.expectCalls(accountsCall, apiCall{Method: http.MethodPut, URI: hubPath, Body: map[string]interface{}{
 		"coverage": "selected", "accounts": []interface{}{"acc-a", "acc-b"},
 	}})
-	var got AWSScannerHubResourceModel
+	var got ScannerHubResourceModel
 	getState(t, state, &got)
 	if got.AccountID.ValueString() != "hub-1" || got.Coverage.ValueString() != "selected" {
 		t.Errorf("state = %+v", got)
@@ -95,7 +95,7 @@ func TestScannerHubCreateAllSendsNoAccounts(t *testing.T) {
 	api.expectCalls(accountsCall, apiCall{Method: http.MethodPut, URI: hubPath, Body: map[string]interface{}{
 		"coverage": "all", "accounts": []interface{}{},
 	}})
-	var got AWSScannerHubResourceModel
+	var got ScannerHubResourceModel
 	getState(t, state, &got)
 	if got.Coverage.ValueString() != "all" || !got.AccountIDs.IsNull() {
 		t.Errorf("state = %+v", got)
@@ -224,8 +224,8 @@ func TestScannerHubCreateStopsCheckingTheAccountWhenCancelled(t *testing.T) {
 }
 
 func TestScannerHubCreateGivesUpOnAnAccountCheckThatNeverAnswers(t *testing.T) {
-	defer func(was time.Duration) { awsAccountCheckTimeout = was }(awsAccountCheckTimeout)
-	awsAccountCheckTimeout = 100 * time.Millisecond
+	defer func(was time.Duration) { accountCheckTimeout = was }(accountCheckTimeout)
+	accountCheckTimeout = 100 * time.Millisecond
 	requireError(t, createWithin(t, context.Background(), silentAPI(t)), "Unable to read the accounts", "deadline exceeded")
 }
 
@@ -240,7 +240,7 @@ func TestScannerHubUpdatePutsNewCoverage(t *testing.T) {
 	api.expectCalls(apiCall{Method: http.MethodPut, URI: hubPath, Body: map[string]interface{}{
 		"coverage": "all", "accounts": []interface{}{},
 	}})
-	var got AWSScannerHubResourceModel
+	var got ScannerHubResourceModel
 	getState(t, state, &got)
 	if got.Coverage.ValueString() != "all" || got.AccountIDs.IsNull() || len(got.AccountIDs.Elements()) != 0 {
 		t.Errorf("state = %+v", got)
@@ -318,7 +318,7 @@ func TestScannerHubReadMapsCoverageAndThisHubsAssignments(t *testing.T) {
 	requireNoDiags(t, diags)
 
 	api.expectCalls(apiCall{Method: http.MethodGet, URI: coveragePath})
-	var got AWSScannerHubResourceModel
+	var got ScannerHubResourceModel
 	getState(t, state, &got)
 	if got.AccountID.ValueString() != "hub-1" || got.Coverage.ValueString() != "selected" {
 		t.Errorf("state = %+v", got)
@@ -337,7 +337,7 @@ func TestScannerHubReadSelectedWithNoAssignmentsIsEmpty(t *testing.T) {
 	state, diags := doRead(t, r, s, hubModel("selected", stringSet("acc-a")))
 	requireNoDiags(t, diags)
 
-	var got AWSScannerHubResourceModel
+	var got ScannerHubResourceModel
 	getState(t, state, &got)
 	if got.AccountIDs.IsNull() || len(got.AccountIDs.Elements()) != 0 {
 		t.Errorf("account_ids = %v, want an empty set", got.AccountIDs)
@@ -368,7 +368,7 @@ func TestScannerHubReadAllKeepsAccountIDsEmpty(t *testing.T) {
 			state, diags := doRead(t, r, s, prior)
 			requireNoDiags(t, diags)
 
-			var got AWSScannerHubResourceModel
+			var got ScannerHubResourceModel
 			getState(t, state, &got)
 			if got.Coverage.ValueString() != "all" {
 				t.Errorf("coverage = %s", got.Coverage)
@@ -425,7 +425,7 @@ func TestScannerHubReadsALargeCoverage(t *testing.T) {
 	state, diags := doRead(t, r, s, hubModel("selected", stringSet("acc-z")))
 	requireNoDiags(t, diags)
 
-	var got AWSScannerHubResourceModel
+	var got ScannerHubResourceModel
 	getState(t, state, &got)
 	if ids := setStrings(t, got.AccountIDs); len(ids) != 1 || ids[0] != "acc-a" {
 		t.Errorf("account_ids = %v, want [acc-a]", ids)
@@ -440,7 +440,7 @@ func TestScannerHubImportByAccountID(t *testing.T) {
 	r.(resource.ResourceWithImportState).ImportState(context.Background(), resource.ImportStateRequest{ID: "hub-1"}, resp)
 	requireNoDiags(t, resp.Diagnostics)
 
-	var got AWSScannerHubResourceModel
+	var got ScannerHubResourceModel
 	getState(t, resp.State, &got)
 	if got.AccountID.ValueString() != "hub-1" {
 		t.Errorf("imported account_id = %s", got.AccountID)
@@ -467,7 +467,7 @@ func TestScannerHubValidateConfig(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			r := NewAWSScannerHubResource()
 			s := configured(t, r, nil)
-			model := AWSScannerHubResourceModel{AccountID: types.StringValue("hub-1"), Coverage: tc.coverage, AccountIDs: tc.accountIDs}
+			model := ScannerHubResourceModel{AccountID: types.StringValue("hub-1"), Coverage: tc.coverage, AccountIDs: tc.accountIDs}
 
 			resp := &resource.ValidateConfigResponse{}
 			r.(resource.ResourceWithValidateConfig).ValidateConfig(context.Background(),
