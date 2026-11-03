@@ -29,14 +29,6 @@ var _ resource.ResourceWithConfigure = &ScannerHubResource{}
 var _ resource.ResourceWithImportState = &ScannerHubResource{}
 var _ resource.ResourceWithValidateConfig = &ScannerHubResource{}
 
-func NewAWSScannerHubResource() resource.Resource {
-	return &ScannerHubResource{cloud: awsScannerHub}
-}
-
-func NewGCPScannerHubResource() resource.Resource {
-	return &ScannerHubResource{cloud: gcpScannerHub}
-}
-
 // ScannerHubResource makes an AWS account's or a GCP project's agentless scanner a hub
 // that also scans other accounts of its cloud (DEV-23499), through ms_accounts'
 // scanner-hub routes. An Azure hub is a subscription: AzureScannerHubResource.
@@ -96,61 +88,6 @@ const pinnedAccountDescription = "An account a hub scanned while its coverage wa
 	"without the account, apply, then set it back to `all`."
 
 const scannerHubForbiddenHint = "Changing what a scanner covers needs a token with access to all accounts" + trialExpiredHint + "."
-
-var awsScannerHub = scannerHubCloud{
-	account: accountKind{
-		accountType:  "AWS",
-		noun:         "an AWS account",
-		resourceType: "streamsec_aws_scanner_hub",
-		ref:          "streamsec_aws_account.<name>.id",
-		nativeID:     "the 12-digit AWS account id",
-	},
-	description: "Makes an AWS account's agentless volume scanner a hub: it also scans other AWS accounts in its regions, " +
-		"through the `StreamScannerSpokeRole` each of them creates (see the `streamsec_aws_scanner_hub_access` data source). " +
-		"Destroying it turns the hub off: each account goes back to its own scanner.\n\n" + pinnedAccountDescription,
-	accountIDDescription: "The Stream Security id of the hub's AWS account (`streamsec_aws_account.<name>.id`). Changing it replaces the resource.",
-	coverageDescription: "Which accounts the hub scans: `all` (every other AWS account without a scanner of its own in the region " +
-		"and not scanned by another hub) or `selected` (the accounts in `account_ids`). Only one hub may cover `all`.",
-	accountIDsDescription: "The Stream Security ids of the AWS accounts the hub scans. Required when `coverage` is `selected` " +
-		"(an empty set scans none); must be unset or empty when `coverage` is `all`.",
-	hints: statusHints{
-		http.StatusBadRequest: "Stream Security refused the coverage: account_id must be a connected AWS account, and each of " +
-			"account_ids a connected AWS account other than a hub. Both take Stream Security account ids " +
-			"(streamsec_aws_account.<name>.id), not 12-digit AWS account ids.",
-		http.StatusForbidden: scannerHubForbiddenHint,
-		http.StatusNotFound:  "account_id is not an account in Stream Security: it takes the Stream Security account id (streamsec_aws_account.<name>.id).",
-		http.StatusConflict: `Another account's scanner already scans all AWS accounts (only one hub may cover "all"), or one of ` +
-			"account_ids is already scanned by another hub. Change that hub's coverage first. " + pinnedAccountNote,
-	},
-}
-
-var gcpScannerHub = scannerHubCloud{
-	account: accountKind{
-		accountType:  "GCP",
-		noun:         "a GCP project",
-		resourceType: "streamsec_gcp_scanner_hub",
-		ref:          "streamsec_gcp_project.<name>.id",
-		nativeID:     "the GCP project id",
-	},
-	description: "Makes a GCP project's agentless volume scanner a hub: it also scans other GCP projects, " +
-		"as its own service account, where that account holds the scanned-projects role (the google-integration " +
-		"module's `modules/volume-scanner-hub-access`, or the console's command, grants it). " +
-		"Destroying it turns the hub off: each project goes back to its own scanner.\n\n" + pinnedAccountDescription,
-	accountIDDescription: "The Stream Security id of the hub's GCP project (`streamsec_gcp_project.<name>.id`). Changing it replaces the resource.",
-	coverageDescription: "Which projects the hub scans: `all` (every other GCP project without a scanner of its own " +
-		"and not scanned by another hub) or `selected` (the projects in `account_ids`). Only one hub may cover `all`.",
-	accountIDsDescription: "The Stream Security ids of the GCP projects the hub scans (`streamsec_gcp_project.<name>.id`). " +
-		"Required when `coverage` is `selected` (an empty set scans none); must be unset or empty when `coverage` is `all`.",
-	hints: statusHints{
-		http.StatusBadRequest: "Stream Security refused the coverage: account_id must be a connected GCP project with a scanner, and each of " +
-			"account_ids a connected GCP project other than a hub. Both take Stream Security account ids " +
-			"(streamsec_gcp_project.<name>.id), not GCP project ids.",
-		http.StatusForbidden: scannerHubForbiddenHint,
-		http.StatusNotFound:  "account_id is not an account in Stream Security: it takes the Stream Security account id (streamsec_gcp_project.<name>.id).",
-		http.StatusConflict: `Another project's scanner already scans all GCP projects (only one hub may cover "all"), or one of ` +
-			"account_ids is already scanned by another hub. Change that hub's coverage first. " + pinnedAccountNote,
-	},
-}
 
 func (r *ScannerHubResource) Metadata(ctx context.Context, req resource.MetadataRequest, resp *resource.MetadataResponse) {
 	resp.TypeName = r.cloud.account.resourceType
