@@ -227,6 +227,7 @@ func (p *StreamsecProvider) Resources(ctx context.Context) []func() resource.Res
 		NewAWSScannerHubResource,
 		NewAWSVolumeScannerAckResource,
 		NewAWSScannerAccessAckResource,
+		NewAzureVolumeScannerAckResource,
 	}
 }
 
@@ -237,6 +238,7 @@ func (p *StreamsecProvider) DataSources(ctx context.Context) []func() datasource
 		NewAzureTenantDataSource,
 		NewGCPProjectDataSource,
 		NewAWSScannerHubAccessDataSource,
+		NewAzureVolumeScannerDataSource,
 	}
 }
 

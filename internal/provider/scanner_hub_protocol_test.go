@@ -79,6 +79,17 @@ func TestScannerHubSchemasAsTerraformSeesThem(t *testing.T) {
 			"hub_account_id":         {typ: tftypes.String, required: true},
 			"spoke_cloud_account_id": {typ: tftypes.String, required: true},
 		}},
+		{"resource streamsec_azure_volume_scanner_ack", resp.ResourceSchemas["streamsec_azure_volume_scanner_ack"], map[string]wantAttribute{
+			"account_id":      {typ: tftypes.String, required: true},
+			"subscription_id": {typ: tftypes.String, required: true},
+			"module_version":  {typ: tftypes.String, required: true},
+			"resource_group":  {typ: tftypes.String, optional: true},
+		}},
+		{"data source streamsec_azure_volume_scanner", resp.DataSourceSchemas["streamsec_azure_volume_scanner"], map[string]wantAttribute{
+			"account_id":       {typ: tftypes.String, required: true},
+			"subscription_id":  {typ: tftypes.String, required: true},
+			"collection_token": {typ: tftypes.String, computed: true, sensitive: true},
+		}},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
@@ -134,6 +145,14 @@ func strSet(values ...string) tftypes.Value {
 
 var nullStrSet = tftypes.NewValue(stringSetType, nil)
 
+var nullStr = tftypes.NewValue(tftypes.String, nil)
+
+func azureAck(accountID, subscriptionID, version string, resourceGroup tftypes.Value) map[string]tftypes.Value {
+	return map[string]tftypes.Value{
+		"account_id": str(accountID), "subscription_id": str(subscriptionID), "module_version": str(version), "resource_group": resourceGroup,
+	}
+}
+
 func TestScannerHubConfigValidation(t *testing.T) {
 	server, resp := protocolServer(t)
 
@@ -181,6 +200,16 @@ func TestScannerHubConfigValidation(t *testing.T) {
 			map[string]tftypes.Value{"account_id": str("acc-1"), "region": str("us-east-1"), "module_version": str("1.16.0-")}, "module_version"},
 		{"volume ack ok", "streamsec_aws_volume_scanner_ack",
 			map[string]tftypes.Value{"account_id": str("acc-1"), "region": str("us-gov-west-1"), "module_version": str("1.16.0")}, ""},
+		{"azure ack ok", "streamsec_azure_volume_scanner_ack", azureAck(azureAccount, azureSubscription, "1.6.0", str("streamsec-scanner-tf(prod)_1")), ""},
+		{"azure ack without a resource group", "streamsec_azure_volume_scanner_ack", azureAck(azureAccount, azureSubscription, "1.6.0", nullStr), ""},
+		// The tenant's own GUID is the easy mistake: it is streamsec_azure_tenant's tenant_id.
+		{"azure ack takes the Stream Security id", "streamsec_azure_volume_scanner_ack", azureAck("11111111-2222-3333-4444-555555555555", azureSubscription, "1.6.0", nullStr), "account_id"},
+		{"azure subscription in uppercase", "streamsec_azure_volume_scanner_ack", azureAck(azureAccount, "ABCDEF00-1111-2222-3333-444444444444", "1.6.0", nullStr), "subscription_id"},
+		{"azure subscription not a GUID", "streamsec_azure_volume_scanner_ack", azureAck(azureAccount, "production", "1.6.0", nullStr), "subscription_id"},
+		{"azure module_version not a version", "streamsec_azure_volume_scanner_ack", azureAck(azureAccount, azureSubscription, "latest", nullStr), "module_version"},
+		{"azure resource group with a space", "streamsec_azure_volume_scanner_ack", azureAck(azureAccount, azureSubscription, "1.6.0", str("scanner rg")), "resource_group"},
+		{"azure resource group over 90 characters", "streamsec_azure_volume_scanner_ack", azureAck(azureAccount, azureSubscription, "1.6.0", str(strings.Repeat("r", 91))), "resource_group"},
+		{"azure resource group of 90 letters", "streamsec_azure_volume_scanner_ack", azureAck(azureAccount, azureSubscription, "1.6.0", str(strings.Repeat("ü", 90))), ""},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
@@ -238,6 +267,14 @@ func TestScannerHubPlanReplacesOnIdentityChanges(t *testing.T) {
 		{"volume ack version", "streamsec_aws_volume_scanner_ack", volumeAck("acc-1", "us-east-1", "1.16.0"), volumeAck("acc-1", "us-east-1", "1.17.0"), ""},
 		{"access ack hub", "streamsec_aws_scanner_access_ack", accessAck("hub-1", "444455556666"), accessAck("hub-2", "444455556666"), "hub_account_id"},
 		{"access ack spoke", "streamsec_aws_scanner_access_ack", accessAck("hub-1", "444455556666"), accessAck("hub-1", "777788889999"), "spoke_cloud_account_id"},
+		{"azure ack tenant", "streamsec_azure_volume_scanner_ack", azureAck(azureAccount, azureSubscription, "1.6.0", nullStr),
+			azureAck("64b7f9a1c2d3e4f5a6b7c8d0", azureSubscription, "1.6.0", nullStr), "account_id"},
+		{"azure ack subscription", "streamsec_azure_volume_scanner_ack", azureAck(azureAccount, azureSubscription, "1.6.0", nullStr),
+			azureAck(azureAccount, "00000000-1111-2222-3333-555555555555", "1.6.0", nullStr), "subscription_id"},
+		{"azure ack version", "streamsec_azure_volume_scanner_ack", azureAck(azureAccount, azureSubscription, "1.6.0", nullStr),
+			azureAck(azureAccount, azureSubscription, "1.7.0", nullStr), ""},
+		{"azure ack resource group", "streamsec_azure_volume_scanner_ack", azureAck(azureAccount, azureSubscription, "1.6.0", nullStr),
+			azureAck(azureAccount, azureSubscription, "1.6.0", str("streamsec-scanner-tf")), ""},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
@@ -333,6 +370,47 @@ func TestScannerAccessAckPlanKeepsSpokeWhileUnknown(t *testing.T) {
 				t.Errorf("planned spoke_cloud_account_id = %s, want %s", attrs["spoke_cloud_account_id"], tc.wantSpoke)
 			}
 		})
+	}
+}
+
+// A volume-scanner module derives the ack's tenant and subscription from data sources, which a
+// depends_on defers to apply whenever what it depends on has changes. That alone must not
+// replace the ack, which would record the scanner uninstalled, then deployed.
+func TestAzureVolumeScannerAckPlanKeepsItsIdsWhileUnknown(t *testing.T) {
+	server, resp := protocolServer(t)
+	schema := resp.ResourceSchemas["streamsec_azure_volume_scanner_ack"]
+	unknown := tftypes.NewValue(tftypes.String, tftypes.UnknownValue)
+	prior, err := tfprotov6.NewDynamicValue(schema.ValueType(),
+		tftypes.NewValue(schema.ValueType(), azureAck(azureAccount, azureSubscription, "1.6.0", nullStr)))
+	if err != nil {
+		t.Fatalf("NewDynamicValue: %s", err)
+	}
+	config := objectValue(t, schema, map[string]tftypes.Value{
+		"account_id": unknown, "subscription_id": unknown, "module_version": str("1.6.0"), "resource_group": nullStr,
+	})
+	out, err := server.PlanResourceChange(context.Background(), &tfprotov6.PlanResourceChangeRequest{
+		TypeName:         "streamsec_azure_volume_scanner_ack",
+		PriorState:       &prior,
+		ProposedNewState: config,
+		Config:           config,
+	})
+	if err != nil {
+		t.Fatalf("PlanResourceChange: %s", err)
+	}
+	requireNoProtocolErrors(t, out.Diagnostics)
+	if len(out.RequiresReplace) > 0 {
+		t.Errorf("RequiresReplace = %v, want none", out.RequiresReplace)
+	}
+	planned, err := out.PlannedState.Unmarshal(schema.ValueType())
+	if err != nil {
+		t.Fatalf("Unmarshal: %s", err)
+	}
+	var attrs map[string]tftypes.Value
+	if err := planned.As(&attrs); err != nil {
+		t.Fatalf("As: %s", err)
+	}
+	if !attrs["account_id"].Equal(str(azureAccount)) || !attrs["subscription_id"].Equal(str(azureSubscription)) {
+		t.Errorf("planned = %v, want the ids in state", attrs)
 	}
 }
 
