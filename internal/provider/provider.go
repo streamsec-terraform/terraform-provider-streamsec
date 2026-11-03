@@ -225,6 +225,8 @@ func (p *StreamsecProvider) Resources(ctx context.Context) []func() resource.Res
 		NewAWSResponseAckResource,
 		NewGCPResponseAckResource,
 		NewAWSScannerHubResource,
+		NewGCPScannerHubResource,
+		NewAzureScannerHubResource,
 		NewAWSVolumeScannerAckResource,
 		NewAWSScannerAccessAckResource,
 		NewAzureVolumeScannerAckResource,

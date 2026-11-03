@@ -27,6 +27,8 @@ var (
 	azureSubscriptionPattern = regexp.MustCompile(`^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$`)
 	// An Azure resource group name: letters, digits, underscores, periods, parentheses and hyphens.
 	azureResourceGroupPattern = regexp.MustCompile(`^[\p{L}\p{N}_.()-]+$`)
+	// A Microsoft Entra object id, such as a managed identity's principal id.
+	azureObjectIDPattern = regexp.MustCompile(`^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$`)
 )
 
 func NewAzureVolumeScannerAckResource() resource.Resource {
@@ -45,6 +47,7 @@ type AzureVolumeScannerAckResourceModel struct {
 	SubscriptionID types.String `tfsdk:"subscription_id"`
 	ModuleVersion  types.String `tfsdk:"module_version"`
 	ResourceGroup  types.String `tfsdk:"resource_group"`
+	PrincipalID    types.String `tfsdk:"principal_id"`
 }
 
 type azureVolumeScannerAckRequest struct {
@@ -52,6 +55,7 @@ type azureVolumeScannerAckRequest struct {
 	Status         string `json:"status"`
 	ModuleVersion  string `json:"module_version"`
 	ResourceGroup  string `json:"resource_group,omitempty"`
+	PrincipalID    string `json:"principal_id,omitempty"`
 }
 
 func azureVolumeScannerAckHints(accountID, subscriptionID string) statusHints {
@@ -123,6 +127,14 @@ func (r *AzureVolumeScannerAckResource) Schema(ctx context.Context, req resource
 						"must be an Azure resource group name: letters, digits, underscores, periods, parentheses and hyphens"),
 				},
 			},
+			"principal_id": schema.StringAttribute{
+				MarkdownDescription: "The principal id of the scanner's managed identity. A hub, a scanner that also scans other subscriptions " +
+					"of the tenant, needs it in Stream Security for the console's access template, which grants that identity its roles there.",
+				Optional: true,
+				Validators: []validator.String{
+					stringvalidator.RegexMatches(azureObjectIDPattern, "must be the principal id (object id) of the scanner's managed identity, a GUID"),
+				},
+			},
 		},
 	}
 }
@@ -185,5 +197,6 @@ func (r *AzureVolumeScannerAckResource) acknowledge(ctx context.Context, data Az
 			Status:         status,
 			ModuleVersion:  data.ModuleVersion.ValueString(),
 			ResourceGroup:  data.ResourceGroup.ValueString(),
+			PrincipalID:    data.PrincipalID.ValueString(),
 		}, nil)
 }
