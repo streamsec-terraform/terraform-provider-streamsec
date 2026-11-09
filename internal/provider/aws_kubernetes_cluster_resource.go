@@ -16,10 +16,10 @@ import (
 	"github.com/hashicorp/terraform-plugin-log/tflog"
 )
 
-// Ensure provider defined types fully satisfy framework interfaces.
 // kubernetesPath is the public API's path to the workspace's Kubernetes cluster integrations.
 const kubernetesPath = "/openapi/integrations/kubernetes"
 
+// Ensure provider defined types fully satisfy framework interfaces.
 var _ resource.Resource = &AWSKubernetesClusterResource{}
 var _ resource.ResourceWithImportState = &AWSKubernetesClusterResource{}
 

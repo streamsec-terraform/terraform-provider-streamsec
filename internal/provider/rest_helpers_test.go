@@ -31,8 +31,6 @@ type apiCall struct {
 	Auth     string
 	Customer string
 	Body     map[string]interface{}
-	// AnyBody, on an expected call, skips comparing the body.
-	AnyBody bool
 }
 
 type fakeResponse struct {
@@ -115,7 +113,7 @@ func (a *fakeAPI) expectCalls(want ...apiCall) {
 		if got[i].Customer != testWorkspace {
 			a.t.Errorf("call %d customer = %q, want the provider's workspace", i, got[i].Customer)
 		}
-		if !want[i].AnyBody && jsonOf(a.t, got[i].Body) != jsonOf(a.t, want[i].Body) {
+		if jsonOf(a.t, got[i].Body) != jsonOf(a.t, want[i].Body) {
 			a.t.Errorf("call %d body = %s, want %s", i, jsonOf(a.t, got[i].Body), jsonOf(a.t, want[i].Body))
 		}
 	}
