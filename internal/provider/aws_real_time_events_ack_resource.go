@@ -121,33 +121,12 @@ func (r *AWSRealTimeEventsAckResource) Create(ctx context.Context, req resource.
 		return
 	}
 
-	query := `
-		query {
-			accounts {
-				_id
-				account_type
-				cloud_account_id
-				display_name
-				cloud_regions
-				stack_region
-				template_url
-				external_id
-				lightlytics_collection_token
-				account_auth_token
-				realtime_regions {
-					region_name
-				}
-			}
-		}`
-
-	res, err := r.client.DoRequest(query, nil)
+	accounts, err := r.client.ListAccounts(ctx)
 
 	if err != nil {
 		resp.Diagnostics.AddError("Client Error", fmt.Sprintf("Unable to get account, got error: %s", err))
 		return
 	}
-
-	accounts := res["accounts"].([]interface{})
 	accountFound := false
 
 	for _, acc := range accounts {
@@ -211,7 +190,7 @@ func (r *AWSRealTimeEventsAckResource) Create(ctx context.Context, req resource.
 		return
 	}
 
-	tflog.Debug(ctx, fmt.Sprintf("Response: %v", res))
+	tflog.Debug(ctx, fmt.Sprintf("Response: %v", accounts))
 
 	// Write logs using the tflog package
 	// Documentation: https://terraform.io/plugin/log
@@ -231,32 +210,12 @@ func (r *AWSRealTimeEventsAckResource) Read(ctx context.Context, req resource.Re
 		return
 	}
 
-	query := `
-		query {
-			accounts {
-				_id
-				account_type
-				cloud_account_id
-				display_name
-				cloud_regions
-				template_url
-				external_id
-				lightlytics_collection_token
-				account_auth_token
-				realtime_regions {
-					region_name
-				}
-			}
-		}`
-
-	res, err := r.client.DoRequest(query, nil)
+	accounts, err := r.client.ListAccounts(ctx)
 
 	if err != nil {
 		resp.Diagnostics.AddError("Client Error", fmt.Sprintf("Unable to get account, got error: %s", err))
 		return
 	}
-
-	accounts := res["accounts"].([]interface{})
 	accountFound := false
 	regionFound := false
 

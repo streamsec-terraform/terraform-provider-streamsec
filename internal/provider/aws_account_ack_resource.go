@@ -3,6 +3,7 @@ package provider
 import (
 	"context"
 	"fmt"
+	"net/http"
 	"regexp"
 	"terraform-provider-streamsec/internal/client"
 
@@ -104,30 +105,12 @@ func (r *AWSAccountAckResource) Create(ctx context.Context, req resource.CreateR
 		return
 	}
 
-	query := `
-		query {
-			accounts {
-				_id
-				account_type
-				cloud_account_id
-				display_name
-				cloud_regions
-				stack_region
-				template_url
-				external_id
-				lightlytics_collection_token
-				account_auth_token
-			}
-		}`
-
-	res, err := r.client.DoRequest(query, nil)
+	accounts, err := r.client.ListAccounts(ctx)
 
 	if err != nil {
 		resp.Diagnostics.AddError("Client Error", fmt.Sprintf("Unable to get account, got error: %s", err))
 		return
 	}
-
-	accounts := res["accounts"].([]interface{})
 	accountFound := false
 	account_auth_token := ""
 
@@ -149,11 +132,6 @@ func (r *AWSAccountAckResource) Create(ctx context.Context, req resource.CreateR
 	tflog.Info(ctx, fmt.Sprintf("Account found: %v", data))
 	tflog.Info(ctx, fmt.Sprintf("Account auth token: %v", account_auth_token))
 
-	query = `
-		mutation AccountAcknowledge($input: AccountAckInput){
-        accountAcknowledge(account: $input)
-    }`
-
 	variables := map[string]interface{}{
 		"input": map[string]interface{}{
 			"lightlytics_internal_account_id": data.ID.ValueString(),
@@ -169,7 +147,9 @@ func (r *AWSAccountAckResource) Create(ctx context.Context, req resource.CreateR
 
 	tflog.Debug(ctx, fmt.Sprintf("variables: %v", variables))
 
-	res, err = r.client.DoRequestWithToken(query, variables, account_auth_token)
+	var res interface{}
+	err = r.client.DoRESTRequestWithToken(ctx, http.MethodPost, client.AccountsPath(data.ID.ValueString(), "acknowledge"),
+		account_auth_token, variables["input"], &res)
 
 	if err != nil {
 		resp.Diagnostics.AddError("Client Error", fmt.Sprintf("Unable to send account acknowledge, got error: %s", err))
@@ -196,31 +176,12 @@ func (r *AWSAccountAckResource) Read(ctx context.Context, req resource.ReadReque
 		return
 	}
 
-	query := `
-		query {
-			accounts {
-				_id
-				account_type
-				cloud_account_id
-				display_name
-				cloud_regions
-				stack_region
-				template_url
-				external_id
-				lightlytics_collection_token
-				account_auth_token
-				role_arn
-			}
-		}`
-
-	res, err := r.client.DoRequest(query, nil)
+	accounts, err := r.client.ListAccounts(ctx)
 
 	if err != nil {
 		resp.Diagnostics.AddError("Client Error", fmt.Sprintf("Unable to get account, got error: %s", err))
 		return
 	}
-
-	accounts := res["accounts"].([]interface{})
 	accountFound := false
 
 	for _, acc := range accounts {
@@ -258,30 +219,12 @@ func (r *AWSAccountAckResource) Update(ctx context.Context, req resource.UpdateR
 		return
 	}
 
-	query := `
-		query {
-			accounts {
-				_id
-				account_type
-				cloud_account_id
-				display_name
-				cloud_regions
-				stack_region
-				template_url
-				external_id
-				lightlytics_collection_token
-				account_auth_token
-			}
-		}`
-
-	res, err := r.client.DoRequest(query, nil)
+	accounts, err := r.client.ListAccounts(ctx)
 
 	if err != nil {
 		resp.Diagnostics.AddError("Client Error", fmt.Sprintf("Unable to get account, got error: %s", err))
 		return
 	}
-
-	accounts := res["accounts"].([]interface{})
 	accountFound := false
 	account_auth_token := ""
 
@@ -305,11 +248,6 @@ func (r *AWSAccountAckResource) Update(ctx context.Context, req resource.UpdateR
 
 	// check if there was a change in display_name
 	if data.RoleARN != state.RoleARN {
-		query := `
-			mutation accountUpdateAcknowledge($account: AccountUpdateAckInput) {
-				accountUpdateAcknowledge(account: $account)
-			}`
-
 		variables := map[string]interface{}{
 			"account": map[string]interface{}{
 				"lightlytics_internal_account_id": data.ID.ValueString(),
@@ -321,7 +259,8 @@ func (r *AWSAccountAckResource) Update(ctx context.Context, req resource.UpdateR
 
 		tflog.Debug(ctx, fmt.Sprintf("variables: %v", variables))
 
-		_, err := r.client.DoRequestWithToken(query, variables, account_auth_token)
+		err := r.client.DoRESTRequestWithToken(ctx, http.MethodPost, client.AccountsPath(data.ID.ValueString(), "update_acknowledge"),
+			account_auth_token, variables["account"], nil)
 
 		if err != nil {
 			resp.Diagnostics.AddError("Client Error", fmt.Sprintf("Unable to update account, got error: %s", err))

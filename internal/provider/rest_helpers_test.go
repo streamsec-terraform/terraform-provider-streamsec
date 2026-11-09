@@ -40,7 +40,7 @@ type fakeResponse struct {
 	body   string
 }
 
-// fakeAPI stands in for the front gate: it answers "METHOD URI" from routes and
+// fakeAPI stands in for Stream Security's API: it answers "METHOD URI" from routes and
 // records every call. Any other call fails the test.
 type fakeAPI struct {
 	t      *testing.T

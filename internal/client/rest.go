@@ -31,7 +31,7 @@ type APIError struct {
 	Method     string
 	Path       string
 	StatusCode int
-	// Detail is the reason given: ms_accounts' "detail", the front gate's "error", or the body itself.
+	// Detail is the reason given: the answer's "detail", "error" or "message", or the body itself.
 	Detail string
 }
 
@@ -43,21 +43,40 @@ func (e *APIError) Error() string {
 	return msg
 }
 
-// AccountsPath is the front gate's REST path to an ms_accounts /accounts route,
-// /api/accounts/accounts/<segments>, with each segment escaped.
+// AccountsPath is the REST path /api/accounts/accounts/<segments>, with each segment escaped.
 func AccountsPath(segments ...string) string {
+	return "/api/accounts/accounts/" + escapeSegments(segments...)
+}
+
+func escapeSegments(segments ...string) string {
 	escaped := make([]string, len(segments))
 	for i, segment := range segments {
 		escaped[i] = url.PathEscape(segment)
 	}
-	return "/api/accounts/accounts/" + strings.Join(escaped, "/")
+	return strings.Join(escaped, "/")
 }
 
-// DoRESTRequest calls https://<host><path> with the credentials DoRequest sends: the
-// api token or login token as the bearer token, and the workspace as the customer header.
-// A non-nil body is sent as JSON, and a 2xx answer is decoded into a non-nil out.
-// Any other answer is returned as an *APIError.
+// DoRESTRequest calls https://<host><path> with the api token or login token as the bearer
+// token, and the workspace as the customer header. A non-nil body is sent as JSON, and the
+// data field of a 2xx answer is decoded into a non-nil out. Any other answer is returned as
+// an *APIError.
 func (c *Client) DoRESTRequest(ctx context.Context, method, path string, body, out interface{}) error {
+	return c.do(ctx, method, path, c.Token, c.Workspace, body, out, true)
+}
+
+// DoRESTRequestWithToken is DoRESTRequest with token as the bearer token and no customer
+// header: an account's own token belongs to its workspace.
+func (c *Client) DoRESTRequestWithToken(ctx context.Context, method, path, token string, body, out interface{}) error {
+	return c.do(ctx, method, path, token, "", body, out, true)
+}
+
+// DoAPIRequest is DoRESTRequest for the public API, whose 2xx answer is decoded whole into a
+// non-nil out.
+func (c *Client) DoAPIRequest(ctx context.Context, method, path string, body, out interface{}) error {
+	return c.do(ctx, method, path, c.Token, c.Workspace, body, out, false)
+}
+
+func (c *Client) do(ctx context.Context, method, path, token, workspace string, body, out interface{}, enveloped bool) error {
 	var reqBody io.Reader
 	if body != nil {
 		encoded, err := json.Marshal(body)
@@ -75,11 +94,11 @@ func (c *Client) DoRESTRequest(ctx context.Context, method, path string, body, o
 	if body != nil {
 		req.Header.Set("Content-Type", "application/json")
 	}
-	if c.Token != "" {
-		req.Header.Set("Authorization", "Bearer "+c.Token)
+	if token != "" {
+		req.Header.Set("Authorization", "Bearer "+token)
 	}
-	if c.Workspace != "" {
-		req.Header.Set("customer", c.Workspace)
+	if workspace != "" {
+		req.Header.Set("customer", workspace)
 	}
 
 	resp, err := c.httpClient().Do(req)
@@ -97,8 +116,8 @@ func (c *Client) DoRESTRequest(ctx context.Context, method, path string, body, o
 		}
 		return &APIError{Method: method, Path: path, StatusCode: resp.StatusCode, Detail: errorDetail(respBody)}
 	}
-	if out != nil {
-		// Stream Security answers {"status": "OK", "data": <answer>}.
+	if out != nil && enveloped {
+		// The REST API answers {"status": "OK", "data": <answer>}.
 		var envelope struct {
 			Data json.RawMessage `json:"data"`
 		}
@@ -106,6 +125,10 @@ func (c *Client) DoRESTRequest(ctx context.Context, method, path string, body, o
 			return fmt.Errorf("decoding the %s %s answer: %w", method, path, err)
 		}
 		if err := json.Unmarshal(envelope.Data, out); err != nil {
+			return fmt.Errorf("decoding the %s %s answer: %w", method, path, err)
+		}
+	} else if out != nil {
+		if err := json.NewDecoder(resp.Body).Decode(out); err != nil {
 			return fmt.Errorf("decoding the %s %s answer: %w", method, path, err)
 		}
 	}
@@ -124,18 +147,27 @@ func (c *Client) httpClient() *http.Client {
 func errorDetail(body []byte) string {
 	text := strings.TrimSpace(string(body))
 	var parsed struct {
-		Detail json.RawMessage `json:"detail"`
-		Error  json.RawMessage `json:"error"`
+		Detail  json.RawMessage `json:"detail"`
+		Error   json.RawMessage `json:"error"`
+		Message json.RawMessage `json:"message"`
 	}
 	if json.Unmarshal(body, &parsed) == nil {
-		for _, raw := range []json.RawMessage{parsed.Detail, parsed.Error} {
+		for _, raw := range []json.RawMessage{parsed.Detail, parsed.Error, parsed.Message} {
 			if len(raw) == 0 || string(raw) == "null" {
 				continue
 			}
-			// A string, or as is: FastAPI's validation errors are a list.
+			// A string, an object's message (as the login answers), or as is: FastAPI's
+			// validation errors are a list.
 			var reason string
+			var object struct {
+				Message string `json:"message"`
+			}
 			if json.Unmarshal(raw, &reason) != nil {
-				reason = string(raw)
+				if json.Unmarshal(raw, &object) == nil && object.Message != "" {
+					reason = object.Message
+				} else {
+					reason = string(raw)
+				}
 			}
 			text = reason
 			break

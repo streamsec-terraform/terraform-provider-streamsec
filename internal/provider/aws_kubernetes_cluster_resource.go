@@ -3,6 +3,8 @@ package provider
 import (
 	"context"
 	"fmt"
+	"net/http"
+	"net/url"
 	"terraform-provider-streamsec/internal/client"
 
 	"github.com/hashicorp/terraform-plugin-framework/path"
@@ -15,6 +17,9 @@ import (
 )
 
 // Ensure provider defined types fully satisfy framework interfaces.
+// kubernetesPath is the public API's path to the workspace's Kubernetes cluster integrations.
+const kubernetesPath = "/openapi/integrations/kubernetes"
+
 var _ resource.Resource = &AWSKubernetesClusterResource{}
 var _ resource.ResourceWithImportState = &AWSKubernetesClusterResource{}
 
@@ -116,27 +121,17 @@ func (r *AWSKubernetesClusterResource) Create(ctx context.Context, req resource.
 		return
 	}
 
-	query := `
-		mutation CreateKubernetes($display_name: String, $arn: String) {
-			createKubernetes(kubernetes: {
-				display_name: $display_name,
-				eks_arn: $arn,
-			  })
-			{
-				_id
-				status
-				collection_token
-				creation_date
-			}
-	}`
-
 	variables := map[string]interface{}{
 		"display_name": data.DisplayName.ValueString(),
 		"arn":          data.ARN.ValueString()}
 
 	tflog.Debug(ctx, fmt.Sprintf("variables: %v", variables))
 
-	res, err := r.client.DoRequest(query, variables)
+	var res map[string]interface{}
+	err := r.client.DoAPIRequest(ctx, http.MethodPost, kubernetesPath, map[string]interface{}{
+		"display_name": variables["display_name"],
+		"eks_arn":      variables["arn"],
+	}, &res)
 
 	if err != nil {
 		resp.Diagnostics.AddError("Client Error", fmt.Sprintf("Unable to create account, got error: %s", err))
@@ -145,7 +140,7 @@ func (r *AWSKubernetesClusterResource) Create(ctx context.Context, req resource.
 
 	tflog.Debug(ctx, fmt.Sprintf("Response: %v", res))
 
-	cluster := res["createKubernetes"].(map[string]interface{})
+	cluster := res
 	data.ID = types.StringValue(cluster["_id"].(string))
 	data.Status = types.StringValue(cluster["status"].(string))
 	data.CollectionToken = types.StringValue(cluster["collection_token"].(string))
@@ -169,26 +164,14 @@ func (r *AWSKubernetesClusterResource) Read(ctx context.Context, req resource.Re
 		return
 	}
 
-	query := `
-		query {
-			kubernetes {
-				_id
-				display_name
-				status
-				collection_token
-				creation_date
-				eks_arn
-			}
-		}`
-
-	res, err := r.client.DoRequest(query, nil)
+	var clusters []interface{}
+	err := r.client.DoAPIRequest(ctx, http.MethodGet, kubernetesPath+"/clusters", nil, &clusters)
 
 	if err != nil {
 		resp.Diagnostics.AddError("Client Error", fmt.Sprintf("Unable to get account, got error: %s", err))
 		return
 	}
 
-	clusters := res["kubernetes"].([]interface{})
 	clusterFound := false
 
 	for _, item := range clusters {
@@ -226,13 +209,6 @@ func (r *AWSKubernetesClusterResource) Update(ctx context.Context, req resource.
 
 	// check if there was a change in display_name
 	if data.DisplayName != state.DisplayName {
-		query := `
-			mutation UpdateKubernetes($id: ID!, $kubernetes: EditKubernetesInput) {
-				updateKubernetes(id: $id, kubernetes: $kubernetes) {
-					_id
-				}
-			}`
-
 		variables := map[string]interface{}{
 			"id": data.ID.ValueString(),
 			"kubernetes": map[string]interface{}{
@@ -240,7 +216,7 @@ func (r *AWSKubernetesClusterResource) Update(ctx context.Context, req resource.
 
 		tflog.Debug(ctx, fmt.Sprintf("variables: %v", variables))
 
-		_, err := r.client.DoRequest(query, variables)
+		err := r.client.DoAPIRequest(ctx, http.MethodPut, kubernetesPath+"/"+url.PathEscape(data.ID.ValueString()), variables["kubernetes"], nil)
 
 		if err != nil {
 			resp.Diagnostics.AddError("Client Error", fmt.Sprintf("Unable to update account, got error: %s", err))
@@ -263,15 +239,7 @@ func (r *AWSKubernetesClusterResource) Delete(ctx context.Context, req resource.
 		return
 	}
 
-	query := `
-		mutation DeleteKubernetes($id: ID!) {
-			deleteKubernetes(id: $id)
-		}`
-
-	variables := map[string]interface{}{
-		"id": data.ID.ValueString()}
-
-	_, err := r.client.DoRequest(query, variables)
+	err := r.client.DoAPIRequest(ctx, http.MethodDelete, kubernetesPath+"/"+url.PathEscape(data.ID.ValueString()), nil, nil)
 
 	if err != nil {
 		resp.Diagnostics.AddError("Client Error", fmt.Sprintf("Unable to delete account, got error: %s", err))

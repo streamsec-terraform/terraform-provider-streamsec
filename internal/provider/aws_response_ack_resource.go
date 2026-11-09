@@ -157,38 +157,12 @@ func (r *AWSResponseAckResource) Create(ctx context.Context, req resource.Create
 		return
 	}
 
-	query := `
-		query {
-			accounts {
-				_id
-				account_type
-				cloud_account_id
-				display_name
-				cloud_regions
-				stack_region
-				template_url
-				lightlytics_collection_token
-				account_auth_token
-				remediation {
-					status
-					role_arn
-					stack_id
-					runbook_list
-					runbook_role_list
-					policy_to_role_map
-					external_id
-				}
-			}
-		}`
-
-	res, err := r.client.DoRequest(query, nil)
+	accounts, err := r.client.ListAccounts(ctx)
 
 	if err != nil {
 		resp.Diagnostics.AddError("Client Error", fmt.Sprintf("Unable to get account, got error: %s", err))
 		return
 	}
-
-	accounts := res["accounts"].([]interface{})
 	accountFound := false
 
 	for _, acc := range accounts {
@@ -255,7 +229,7 @@ func (r *AWSResponseAckResource) Create(ctx context.Context, req resource.Create
 		return
 	}
 
-	tflog.Debug(ctx, fmt.Sprintf("Response: %v", res))
+	tflog.Debug(ctx, fmt.Sprintf("Response: %v", accounts))
 
 	// Write logs using the tflog package
 	// Documentation: https://terraform.io/plugin/log
@@ -275,37 +249,12 @@ func (r *AWSResponseAckResource) Read(ctx context.Context, req resource.ReadRequ
 		return
 	}
 
-	query := `
-		query {
-			accounts {
-				_id
-				account_type
-				cloud_account_id
-				display_name
-				cloud_regions
-				template_url
-				lightlytics_collection_token
-				account_auth_token
-				remediation {
-					status
-					role_arn
-					stack_id
-					external_id
-					runbook_list
-					runbook_role_list
-					policy_to_role_map
-				}
-			}
-		}`
-
-	res, err := r.client.DoRequest(query, nil)
+	accounts, err := r.client.ListAccounts(ctx)
 
 	if err != nil {
 		resp.Diagnostics.AddError("Client Error", fmt.Sprintf("Unable to get account, got error: %s", err))
 		return
 	}
-
-	accounts := res["accounts"].([]interface{})
 	accountFound := false
 
 	for _, acc := range accounts {
@@ -354,38 +303,12 @@ func (r *AWSResponseAckResource) Update(ctx context.Context, req resource.Update
 		return
 	}
 
-	query := `
-		query {
-			accounts {
-				_id
-				account_type
-				cloud_account_id
-				display_name
-				cloud_regions
-				stack_region
-				template_url
-				lightlytics_collection_token
-				account_auth_token
-				remediation {
-					status
-					role_arn
-					stack_id
-					runbook_list
-					runbook_role_list
-					policy_to_role_map
-					external_id
-				}
-			}
-		}`
-
-	res, err := r.client.DoRequest(query, nil)
+	accounts, err := r.client.ListAccounts(ctx)
 
 	if err != nil {
 		resp.Diagnostics.AddError("Client Error", fmt.Sprintf("Unable to get account, got error: %s", err))
 		return
 	}
-
-	accounts := res["accounts"].([]interface{})
 	accountFound := false
 
 	for _, acc := range accounts {
@@ -445,7 +368,7 @@ func (r *AWSResponseAckResource) Update(ctx context.Context, req resource.Update
 		return
 	}
 
-	tflog.Debug(ctx, fmt.Sprintf("Response: %v", res))
+	tflog.Debug(ctx, fmt.Sprintf("Response: %v", accounts))
 
 	// Write logs using the tflog package
 	tflog.Trace(ctx, "updated a resource")

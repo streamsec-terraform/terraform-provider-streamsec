@@ -100,29 +100,12 @@ func (d *AzureTenantDataSource) Read(ctx context.Context, req datasource.ReadReq
 		return
 	}
 
-	query := `
-		query {
-			accounts {
-				_id
-				account_type
-				cloud_account_id
-				display_name
-				cloud_regions
-				external_id
-				lightlytics_collection_token
-				account_token
-				status
-			}
-		}`
-
-	res, err := d.client.DoRequest(query, nil)
+	accounts, err := d.client.ListAccounts(ctx)
 
 	if err != nil {
 		resp.Diagnostics.AddError("Client Error", fmt.Sprintf("Unable to get account, got error: %s", err))
 		return
 	}
-
-	accounts := res["accounts"].([]interface{})
 	accountFound := false
 
 	tflog.Debug(ctx, fmt.Sprintf("accounts: %v", accounts))
