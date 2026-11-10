@@ -68,7 +68,7 @@ func TestScannerAccessAckCreateErrors(t *testing.T) {
 		resp fakeResponse
 		want []string
 	}{
-		// Also what an id that is no Stream Security account gets: the backend has no 404 here.
+		// Also what an id that is no Stream Security account gets: the Stream API has no 404 here.
 		{"not a hub", fakeResponse{409, `{"error":"Request failed with status code 409"}`},
 			[]string{"409", "hub-1", "does not scan other accounts", "streamsec_aws_scanner_hub", "not its 12-digit AWS account id"}},
 		{"bad request names the field", fakeResponse{400, `{"error":"Request failed with status code 400"}`}, []string{"400", "spoke_cloud_account_id"}},

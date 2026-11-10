@@ -31,7 +31,7 @@ type APIError struct {
 	Method     string
 	Path       string
 	StatusCode int
-	// Detail is the reason given: ms_accounts' "detail", the front gate's "error", or the body itself.
+	// Detail is the reason given: the body's "detail" field, else its "error" field, else the body itself.
 	Detail string
 }
 
@@ -43,7 +43,7 @@ func (e *APIError) Error() string {
 	return msg
 }
 
-// AccountsPath is the front gate's REST path to an ms_accounts /accounts route,
+// AccountsPath is the Stream API's REST path to one of its /accounts routes,
 // /api/accounts/accounts/<segments>, with each segment escaped.
 func AccountsPath(segments ...string) string {
 	escaped := make([]string, len(segments))
@@ -132,7 +132,7 @@ func errorDetail(body []byte) string {
 			if len(raw) == 0 || string(raw) == "null" {
 				continue
 			}
-			// A string, or as is: FastAPI's validation errors are a list.
+			// A string, or as is: validation errors come as a list.
 			var reason string
 			if json.Unmarshal(raw, &reason) != nil {
 				reason = string(raw)

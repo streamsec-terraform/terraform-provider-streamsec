@@ -26,8 +26,8 @@ func providerClient(providerData interface{}, diags *diag.Diagnostics) *client.C
 	return c
 }
 
-// statusHints says what an HTTP status means for one call. Through the front gate a
-// failed call arrives without ms_accounts' own reason, so the hint is all the user gets.
+// statusHints says what an HTTP status means for one call. A failed call can arrive
+// without the API's own reason, so the hint is all the user gets.
 type statusHints map[int]string
 
 func (h statusHints) detail(err error) string {
@@ -61,7 +61,7 @@ func addDeleteError(diags *diag.Diagnostics, errorSummary, goneSummary string, e
 	addAPIError(diags, errorSummary, err, hints)
 }
 
-// The front gate refuses changes, but not reads, in a workspace whose trial has expired.
+// The Stream API refuses changes, but not reads, in a workspace whose trial has expired.
 const trialExpiredHint = ", or the workspace's trial has expired (Stream Security then refuses changes)"
 
 func hasStatus(err error, statuses ...int) bool {
