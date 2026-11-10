@@ -33,7 +33,7 @@ func NewAzureScannerHubResource() resource.Resource {
 
 // AzureScannerHubResource makes an Azure subscription's agentless scanner a hub that also
 // scans other subscriptions of its tenant. An Azure account is a whole tenant, so
-// ms_accounts names a subscription "<tenant account id>:<subscription id>".
+// the Stream API names a subscription "<tenant account id>:<subscription id>".
 type AzureScannerHubResource struct {
 	client *client.Client
 }
@@ -132,7 +132,7 @@ func (r *AzureScannerHubResource) Configure(ctx context.Context, req resource.Co
 	r.client = providerClient(req.ProviderData, &resp.Diagnostics)
 }
 
-// azureSubscriptionKey is how ms_accounts names a subscription of a tenant.
+// azureSubscriptionKey is how the Stream API names a subscription of a tenant.
 func azureSubscriptionKey(accountID, subscriptionID string) string {
 	return accountID + ":" + subscriptionID
 }

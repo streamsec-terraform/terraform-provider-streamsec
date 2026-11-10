@@ -11,7 +11,7 @@ func NewAWSScannerHubResource() resource.Resource {
 }
 
 // awsScannerHub makes an AWS account's agentless scanner a hub that also scans other AWS
-// accounts (DEV-23499), through the StreamScannerSpokeRole each of them creates.
+// accounts, through the StreamScannerSpokeRole each of them creates.
 var awsScannerHub = scannerHubCloud{
 	account: accountKind{
 		accountType:  "AWS",

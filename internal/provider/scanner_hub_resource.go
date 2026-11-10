@@ -30,7 +30,7 @@ var _ resource.ResourceWithImportState = &ScannerHubResource{}
 var _ resource.ResourceWithValidateConfig = &ScannerHubResource{}
 
 // ScannerHubResource makes an AWS account's or a GCP project's agentless scanner a hub
-// that also scans other accounts of its cloud (DEV-23499), through ms_accounts'
+// that also scans other accounts of its cloud, through the Stream API's
 // scanner-hub routes. An Azure hub is a subscription: AzureScannerHubResource.
 type ScannerHubResource struct {
 	client *client.Client
@@ -79,7 +79,7 @@ type scannerCoverage struct {
 	} `json:"assignments"`
 }
 
-// Kept in the backend by design, and not in account_ids, so Read can't show it.
+// Kept by the Stream API by design, and not in account_ids, so Read can't show it.
 const pinnedAccountNote = `An account may also still be pinned to another hub that scanned it while its coverage was "selected", ` +
 	`after that hub switched to "all": to release it, set that hub to "selected" without the account, apply, then set it back to "all".`
 
@@ -185,7 +185,7 @@ func (r *ScannerHubResource) Create(ctx context.Context, req resource.CreateRequ
 // accountCheckTimeout bounds requireAccountKind's query: the GraphQL client has no timeout.
 var accountCheckTimeout = time.Minute
 
-// requireAccountKind refuses an account of another cloud. ms_accounts takes a hub's cloud
+// requireAccountKind refuses an account of another cloud. The Stream API takes a hub's cloud
 // from its account, so a GCP project's id would make a GCP hub, which an AWS hub's Read
 // (its own cloud's hubs only) never finds and destroy never turns off. account_id replaces
 // the resource, so Create is the only place it can change.

@@ -216,7 +216,7 @@ func TestScannerHubConfigValidation(t *testing.T) {
 			map[string]tftypes.Value{"hub_account_id": str("hub-1"), "spoke_cloud_account_id": str("444455556666")}, ""},
 		{"region shape", "streamsec_aws_volume_scanner_ack",
 			map[string]tftypes.Value{"account_id": str("acc-1"), "region": str("US East 1"), "module_version": str("1.16.0")}, "region"},
-		// The backend's format: v?MAJOR.MINOR.PATCH(-pre)?(+build)?, at most 64 characters.
+		// The format the Stream API accepts: v?MAJOR.MINOR.PATCH(-pre)?(+build)?, at most 64 characters.
 		{"module_version too long", "streamsec_aws_volume_scanner_ack",
 			map[string]tftypes.Value{"account_id": str("acc-1"), "region": str("us-east-1"), "module_version": str("1.2.3-" + strings.Repeat("a", 59))}, "module_version"},
 		{"module_version of 64", "streamsec_aws_volume_scanner_ack",
@@ -227,7 +227,7 @@ func TestScannerHubConfigValidation(t *testing.T) {
 			map[string]tftypes.Value{"account_id": str("acc-1"), "region": str("us-east-1"), "module_version": str("latest")}, "module_version"},
 		{"module_version of two parts", "streamsec_aws_volume_scanner_ack",
 			map[string]tftypes.Value{"account_id": str("acc-1"), "region": str("us-east-1"), "module_version": str("1.16")}, "module_version"},
-		// The whole value must match, as the backend's fullmatch does.
+		// The whole value must match, not just a part of it.
 		{"module_version with a prefix", "streamsec_aws_volume_scanner_ack",
 			map[string]tftypes.Value{"account_id": str("acc-1"), "region": str("us-east-1"), "module_version": str("release-1.16.0")}, "module_version"},
 		{"module_version with trailing junk", "streamsec_aws_volume_scanner_ack",

@@ -7,7 +7,7 @@ import (
 	"github.com/hashicorp/terraform-plugin-framework/types"
 )
 
-// Azure: a hub is a subscription, which ms_accounts names "<tenant account id>:<subscription id>".
+// Azure: a hub is a subscription, which the Stream API names "<tenant account id>:<subscription id>".
 
 const (
 	azureTenant       = "0123456789abcdef01234567"
