@@ -23,7 +23,7 @@ var gcpScannerHub = scannerHubCloud{
 	description: "Makes a GCP project's agentless volume scanner a hub: it also scans other GCP projects, " +
 		"as its own service account, where that account holds the scanned-projects role (the google-integration " +
 		"module's `modules/volume-scanner-hub-access`, or the console's command, grants it). " +
-		"Destroying it turns the hub off: each project goes back to its own scanner.\n\n" + pinnedAccountDescription,
+		"Destroying it turns the hub off: each project goes back to its own scanner.\n\n" + pinnedDescription("A project", "the project"),
 	accountIDDescription: "The Stream Security id of the hub's GCP project (`streamsec_gcp_project.<name>.id`). Changing it replaces the resource.",
 	coverageDescription: "Which projects the hub scans: `all` (every other GCP project without a scanner of its own " +
 		"and not scanned by another hub) or `selected` (the projects in `account_ids`). Only one hub may cover `all`.",

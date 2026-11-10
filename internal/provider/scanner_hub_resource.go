@@ -83,9 +83,12 @@ type scannerCoverage struct {
 const pinnedAccountNote = `An account may also still be pinned to another hub that scanned it while its coverage was "selected", ` +
 	`after that hub switched to "all": to release it, set that hub to "selected" without the account, apply, then set it back to "all".`
 
-const pinnedAccountDescription = "An account a hub scanned while its coverage was `selected` stays pinned to that hub after it switches to `all`, " +
-	"and another hub can't select it (Stream Security answers 409). To release it, set that hub to `selected` " +
-	"without the account, apply, then set it back to `all`."
+// pinnedDescription is pinnedAccountNote for the docs, in the cloud's words: "An account", "the account".
+func pinnedDescription(oneNoun, theNoun string) string {
+	return oneNoun + " a hub scanned while its coverage was `selected` stays pinned to that hub after it switches to `all`, " +
+		"and another hub can't select it (Stream Security answers 409). To release it, set that hub to `selected` " +
+		"without " + theNoun + ", apply, then set it back to `all`."
+}
 
 const scannerHubForbiddenHint = "Changing what a scanner covers needs a token with access to all accounts" + trialExpiredHint + "."
 

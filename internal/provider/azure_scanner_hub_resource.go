@@ -166,7 +166,7 @@ func (r *AzureScannerHubResource) Read(ctx context.Context, req resource.ReadReq
 	}
 
 	hubKey := data.hubKey()
-	coverage, keys, found := readScannerHub(ctx, r.client, "Azure", hubKey, azureScannerHubHints, &resp.Diagnostics)
+	coverage, keys, found := readScannerHub(ctx, r.client, azureTenantKind.accountType, hubKey, azureScannerHubHints, &resp.Diagnostics)
 	if resp.Diagnostics.HasError() {
 		return
 	}

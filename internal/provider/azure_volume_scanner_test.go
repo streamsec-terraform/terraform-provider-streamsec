@@ -74,13 +74,13 @@ func TestAzureVolumeScannerAckSendsTheIdentitysPrincipal(t *testing.T) {
 	s := configured(t, r, c)
 
 	model := azureAckModel("1.6.0", types.StringNull())
-	model.PrincipalID = types.StringValue("ced13e23-555a-45ea-8e35-accc2b97a2a8")
+	model.PrincipalID = types.StringValue("00000000-0000-0000-0000-00000000000a")
 	_, diags := doCreate(t, r, s, model)
 	requireNoDiags(t, diags)
 
 	api.expectCalls(apiCall{Method: http.MethodPut, URI: azureAckPath, Body: map[string]interface{}{
 		"subscription_id": azureSubscription, "status": "deployed", "module_version": "1.6.0",
-		"principal_id": "ced13e23-555a-45ea-8e35-accc2b97a2a8",
+		"principal_id": "00000000-0000-0000-0000-00000000000a",
 	}})
 }
 

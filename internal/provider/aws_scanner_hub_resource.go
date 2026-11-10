@@ -22,7 +22,7 @@ var awsScannerHub = scannerHubCloud{
 	},
 	description: "Makes an AWS account's agentless volume scanner a hub: it also scans other AWS accounts in its regions, " +
 		"through the `StreamScannerSpokeRole` each of them creates (see the `streamsec_aws_scanner_hub_access` data source). " +
-		"Destroying it turns the hub off: each account goes back to its own scanner.\n\n" + pinnedAccountDescription,
+		"Destroying it turns the hub off: each account goes back to its own scanner.\n\n" + pinnedDescription("An account", "the account"),
 	accountIDDescription: "The Stream Security id of the hub's AWS account (`streamsec_aws_account.<name>.id`). Changing it replaces the resource.",
 	coverageDescription: "Which accounts the hub scans: `all` (every other AWS account without a scanner of its own in the region " +
 		"and not scanned by another hub) or `selected` (the accounts in `account_ids`). Only one hub may cover `all`.",

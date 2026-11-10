@@ -4,14 +4,14 @@ page_title: "streamsec_gcp_scanner_hub Resource - streamsec"
 subcategory: ""
 description: |-
   Makes a GCP project's agentless volume scanner a hub: it also scans other GCP projects, as its own service account, where that account holds the scanned-projects role (the google-integration module's modules/volume-scanner-hub-access, or the console's command, grants it). Destroying it turns the hub off: each project goes back to its own scanner.
-  An account a hub scanned while its coverage was selected stays pinned to that hub after it switches to all, and another hub can't select it (Stream Security answers 409). To release it, set that hub to selected without the account, apply, then set it back to all.
+  A project a hub scanned while its coverage was selected stays pinned to that hub after it switches to all, and another hub can't select it (Stream Security answers 409). To release it, set that hub to selected without the project, apply, then set it back to all.
 ---
 
 # streamsec_gcp_scanner_hub (Resource)
 
 Makes a GCP project's agentless volume scanner a hub: it also scans other GCP projects, as its own service account, where that account holds the scanned-projects role (the google-integration module's `modules/volume-scanner-hub-access`, or the console's command, grants it). Destroying it turns the hub off: each project goes back to its own scanner.
 
-An account a hub scanned while its coverage was `selected` stays pinned to that hub after it switches to `all`, and another hub can't select it (Stream Security answers 409). To release it, set that hub to `selected` without the account, apply, then set it back to `all`.
+A project a hub scanned while its coverage was `selected` stays pinned to that hub after it switches to `all`, and another hub can't select it (Stream Security answers 409). To release it, set that hub to `selected` without the project, apply, then set it back to `all`.
 
 ## Example Usage
 

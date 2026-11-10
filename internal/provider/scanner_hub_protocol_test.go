@@ -166,8 +166,9 @@ func azureAck(accountID, subscriptionID, version string, resourceGroup tftypes.V
 	}
 }
 
+// The module sends the identity's resource group with it: Stream Security looks for the identity there.
 func azureAckWithPrincipal(principalID string) map[string]tftypes.Value {
-	attrs := azureAck(azureAccount, azureSubscription, "1.6.0", nullStr)
+	attrs := azureAck(azureAccount, azureSubscription, "1.6.0", str("streamsec-scanner-tf"))
 	attrs["principal_id"] = str(principalID)
 	return attrs
 }
@@ -245,8 +246,13 @@ func TestScannerHubConfigValidation(t *testing.T) {
 		{"azure module_version not a version", "streamsec_azure_volume_scanner_ack", azureAck(azureAccount, azureSubscription, "latest", nullStr), "module_version"},
 		{"azure resource group with a space", "streamsec_azure_volume_scanner_ack", azureAck(azureAccount, azureSubscription, "1.6.0", str("scanner rg")), "resource_group"},
 		{"azure resource group over 90 characters", "streamsec_azure_volume_scanner_ack", azureAck(azureAccount, azureSubscription, "1.6.0", str(strings.Repeat("r", 91))), "resource_group"},
-		{"azure ack with the identity's principal", "streamsec_azure_volume_scanner_ack", azureAckWithPrincipal("ced13e23-555a-45ea-8e35-accc2b97a2a8"), ""},
+		{"azure ack with the identity's principal", "streamsec_azure_volume_scanner_ack", azureAckWithPrincipal("00000000-0000-0000-0000-00000000000a"), ""},
 		{"azure ack principal not a GUID", "streamsec_azure_volume_scanner_ack", azureAckWithPrincipal("streamsec-scanner-mi"), "principal_id"},
+		{"azure ack principal without its resource group", "streamsec_azure_volume_scanner_ack", func() map[string]tftypes.Value {
+			attrs := azureAckWithPrincipal("00000000-0000-0000-0000-00000000000a")
+			attrs["resource_group"] = nullStr
+			return attrs
+		}(), "principal_id"},
 		{"azure resource group of 90 letters", "streamsec_azure_volume_scanner_ack", azureAck(azureAccount, azureSubscription, "1.6.0", str(strings.Repeat("ü", 90))), ""},
 	}
 	for _, tc := range cases {
@@ -313,6 +319,19 @@ func TestScannerHubPlanReplacesOnIdentityChanges(t *testing.T) {
 			azureAck(azureAccount, azureSubscription, "1.7.0", nullStr), ""},
 		{"azure ack resource group", "streamsec_azure_volume_scanner_ack", azureAck(azureAccount, azureSubscription, "1.6.0", nullStr),
 			azureAck(azureAccount, azureSubscription, "1.6.0", str("streamsec-scanner-tf")), ""},
+		{"azure ack principal", "streamsec_azure_volume_scanner_ack", azureAckWithPrincipal("00000000-0000-0000-0000-00000000000a"),
+			azureAckWithPrincipal("00000000-0000-0000-0000-00000000000b"), ""},
+		{"gcp hub project", "streamsec_gcp_scanner_hub", hub("hub-1", "all", nullStrSet), hub("hub-2", "all", nullStrSet), "account_id"},
+		{"gcp hub projects", "streamsec_gcp_scanner_hub", hub("hub-1", "selected", strSet("project-a")), hub("hub-1", "selected", strSet("project-b")), ""},
+		{"azure hub tenant", "streamsec_azure_scanner_hub", azureHub(azureAccount, azureSubscription, "all", nullStrSet),
+			azureHub("64b7f9a1c2d3e4f5a6b7c8d0", azureSubscription, "all", nullStrSet), "account_id"},
+		{"azure hub subscription", "streamsec_azure_scanner_hub", azureHub(azureAccount, azureSubscription, "all", nullStrSet),
+			azureHub(azureAccount, "00000000-1111-2222-3333-555555555555", "all", nullStrSet), "subscription_id"},
+		{"azure hub coverage", "streamsec_azure_scanner_hub", azureHub(azureAccount, azureSubscription, "all", nullStrSet),
+			azureHub(azureAccount, azureSubscription, "selected", strSet("00000000-0000-0000-0000-0000000000b2")), ""},
+		{"azure hub covered subscriptions", "streamsec_azure_scanner_hub",
+			azureHub(azureAccount, azureSubscription, "selected", strSet("00000000-0000-0000-0000-0000000000b2")),
+			azureHub(azureAccount, azureSubscription, "selected", strSet("00000000-0000-0000-0000-0000000000b3")), ""},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {

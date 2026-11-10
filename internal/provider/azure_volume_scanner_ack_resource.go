@@ -9,6 +9,7 @@ import (
 	"terraform-provider-streamsec/internal/client"
 
 	"github.com/hashicorp/terraform-plugin-framework-validators/stringvalidator"
+	"github.com/hashicorp/terraform-plugin-framework/path"
 	"github.com/hashicorp/terraform-plugin-framework/resource"
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema"
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema/planmodifier"
@@ -60,8 +61,12 @@ type azureVolumeScannerAckRequest struct {
 
 func azureVolumeScannerAckHints(accountID, subscriptionID string) statusHints {
 	return statusHints{
-		http.StatusBadRequest: "Stream Security refused subscription_id or module_version: subscription_id must be an Azure subscription id, " +
-			"and module_version a version, such as 1.6.0 (a leading v and -pre or +build suffixes are allowed), of at most 64 characters.",
+		http.StatusBadRequest: "Stream Security refused subscription_id, module_version or principal_id: subscription_id must be an Azure subscription id, " +
+			"module_version a version, such as 1.6.0 (a leading v and -pre or +build suffixes are allowed), of at most 64 characters, " +
+			"and principal_id the principal id of a user-assigned managed identity in resource_group.",
+		http.StatusBadGateway: fmt.Sprintf("Stream Security could not confirm principal_id with Azure: it reads the managed identities of resource_group "+
+			"in subscription %s through tenant %s's integration. Check that the integration can read that subscription, then apply again.",
+			subscriptionID, accountID),
 		http.StatusForbidden: fmt.Sprintf("The token has no access to Azure tenant %s or subscription %s, or is read-only%s.",
 			accountID, subscriptionID, trialExpiredHint),
 		http.StatusNotFound: fmt.Sprintf("Either tenant %s is not in Stream Security, or subscription %s is not one of its subscriptions: "+
@@ -129,10 +134,13 @@ func (r *AzureVolumeScannerAckResource) Schema(ctx context.Context, req resource
 			},
 			"principal_id": schema.StringAttribute{
 				MarkdownDescription: "The principal id of the scanner's managed identity. A hub, a scanner that also scans other subscriptions " +
-					"of the tenant, needs it in Stream Security for the console's access template, which grants that identity its roles there.",
+					"of the tenant, needs it in Stream Security for the console's access template, which grants that identity its roles there. " +
+					"Requires `resource_group`: it must be a user-assigned managed identity in that group, which Stream Security checks with Azure. " +
+					"Each acknowledgement records only the principal it is sent, so leaving it out clears it there.",
 				Optional: true,
 				Validators: []validator.String{
 					stringvalidator.RegexMatches(azureObjectIDPattern, "must be the principal id (object id) of the scanner's managed identity, a GUID"),
+					stringvalidator.AlsoRequires(path.MatchRoot("resource_group")),
 				},
 			},
 		},
