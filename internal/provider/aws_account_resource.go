@@ -3,6 +3,7 @@ package provider
 import (
 	"context"
 	"fmt"
+	"net/http"
 	"regexp"
 	"terraform-provider-streamsec/internal/client"
 	"terraform-provider-streamsec/internal/utils"
@@ -143,24 +144,6 @@ func (r *AWSAccountResource) Create(ctx context.Context, req resource.CreateRequ
 		return
 	}
 
-	query := `
-		mutation CreateAccount($account_type: CloudProvider!, $cloud_account_id: String!, $display_name: String, $cloud_regions: [String], $external_id: String) {
-			createAccount(account: {
-				account_type: $account_type,
-				cloud_account_id: $cloud_account_id,
-				display_name: $display_name,
-				cloud_regions: $cloud_regions,
-				external_id: $external_id,
-			  })
-			{
-				_id
-				template_url
-				external_id
-				lightlytics_collection_token
-				account_auth_token
-			}
-	}`
-
 	variables := map[string]interface{}{
 		"account_type":     "AWS",
 		"cloud_account_id": data.CloudAccountID.ValueString(),
@@ -173,7 +156,8 @@ func (r *AWSAccountResource) Create(ctx context.Context, req resource.CreateRequ
 
 	tflog.Debug(ctx, fmt.Sprintf("variables: %v", variables))
 
-	res, err := r.client.DoRequest(query, variables)
+	var res map[string]interface{}
+	err := r.client.DoAPIRequest(ctx, http.MethodPost, client.CloudAccountsPath, variables, &res)
 
 	if err != nil {
 		resp.Diagnostics.AddError("Client Error", fmt.Sprintf("Unable to create account, got error: %s", err))
@@ -182,7 +166,7 @@ func (r *AWSAccountResource) Create(ctx context.Context, req resource.CreateRequ
 
 	tflog.Debug(ctx, fmt.Sprintf("Response: %v", res))
 
-	account := res["createAccount"].(map[string]interface{})
+	account := res
 	data.ID = types.StringValue(account["_id"].(string))
 	data.TemplateURL = types.StringValue(account["template_url"].(string))
 	data.ExternalID = types.StringValue(account["external_id"].(string))
@@ -207,30 +191,12 @@ func (r *AWSAccountResource) Read(ctx context.Context, req resource.ReadRequest,
 		return
 	}
 
-	query := `
-		query {
-			accounts {
-				_id
-				account_type
-				cloud_account_id
-				display_name
-				cloud_regions
-				template_url
-				external_id
-				lightlytics_collection_token
-				account_auth_token
-				status
-			}
-		}`
-
-	res, err := r.client.DoRequest(query, nil)
+	accounts, err := r.client.ListAccounts(ctx)
 
 	if err != nil {
 		resp.Diagnostics.AddError("Client Error", fmt.Sprintf("Unable to get accounts, got error: %s", err))
 		return
 	}
-
-	accounts := res["accounts"].([]interface{})
 	accountFound := false
 
 	for _, acc := range accounts {
@@ -274,13 +240,6 @@ func (r *AWSAccountResource) Update(ctx context.Context, req resource.UpdateRequ
 
 	// check if there was a change in display_name
 	if data.DisplayName != state.DisplayName || !utils.EqualListValues(data.CloudRegions, state.CloudRegions) {
-		query := `
-			mutation UpdateAccount($id: ID!, $account: AccountUpdateInput) {
-				updateAccount(id: $id, account: $account) {
-					_id
-				}
-			}`
-
 		variables := map[string]interface{}{
 			"id": data.ID.ValueString(),
 			"account": map[string]interface{}{
@@ -289,7 +248,7 @@ func (r *AWSAccountResource) Update(ctx context.Context, req resource.UpdateRequ
 
 		tflog.Debug(ctx, fmt.Sprintf("variables: %v", variables))
 
-		_, err := r.client.DoRequest(query, variables)
+		err := r.client.DoAPIRequest(ctx, http.MethodPut, client.CloudAccountPath(data.ID.ValueString()), variables["account"], nil)
 
 		if err != nil {
 			resp.Diagnostics.AddError("Client Error", fmt.Sprintf("Unable to update account, got error: %s", err))
@@ -312,15 +271,7 @@ func (r *AWSAccountResource) Delete(ctx context.Context, req resource.DeleteRequ
 		return
 	}
 
-	query := `
-		mutation DeleteAccount($id: ID!) {
-			deleteAccount(id: $id)
-		}`
-
-	variables := map[string]interface{}{
-		"id": data.ID.ValueString()}
-
-	_, err := r.client.DoRequest(query, variables)
+	err := r.client.DoAPIRequest(ctx, http.MethodDelete, client.CloudAccountPath(data.ID.ValueString()), nil, nil)
 
 	if err != nil {
 		resp.Diagnostics.AddError("Client Error", fmt.Sprintf("Unable to delete account, got error: %s", err))

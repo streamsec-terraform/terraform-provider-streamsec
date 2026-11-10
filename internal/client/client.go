@@ -3,26 +3,24 @@ package client
 import (
 	"context"
 	"errors"
-	"fmt"
 	"net/http"
-
-	"github.com/machinebox/graphql"
 )
 
+// CloudAccountsPath is the public API's path to the workspace's cloud accounts.
+const CloudAccountsPath = "/openapi/integrations/cloud-accounts"
+
 type Client struct {
-	graphqlClient *graphql.Client
-	Token         string
-	Workspace     string
-	Host          string
-	// HTTPClient makes DoRESTRequest's calls; nil uses a client with a timeout.
+	Token     string
+	Workspace string
+	Host      string
+	// HTTPClient makes the client's calls; nil uses a client with a timeout.
 	HTTPClient *http.Client
 }
 
 func NewClient(host, username, password, workspace_id *string, apiToken *string) (*Client, error) {
 
 	c := Client{
-		graphqlClient: graphql.NewClient(fmt.Sprintf("https://%s/graphql", *host)),
-		Host:          *host,
+		Host: *host,
 	}
 
 	c.Token = ""
@@ -44,86 +42,40 @@ func NewClient(host, username, password, workspace_id *string, apiToken *string)
 }
 
 func (c *Client) authenticate(username, password *string) error {
-	data, err := c.DoRequest(`
-        mutation ($creds: Credentials) {
-            login (credentials:$creds) {
-                access_token
-            }
-        }
-    `, map[string]interface{}{
-		"creds": map[string]interface{}{
-			"email":    username,
-			"password": password}})
+	var answer struct {
+		Result struct {
+			Data struct {
+				AccessToken string `json:"access_token"`
+			} `json:"data"`
+		} `json:"result"`
+	}
+	err := c.DoAPIRequest(context.Background(), http.MethodPost, "/trpc/auth.login", map[string]interface{}{
+		"email":    username,
+		"password": password}, &answer)
 
 	if err != nil {
 		return err
 	}
 
-	token, valid := data["login"].(map[string]interface{})["access_token"].(string)
-
-	if !valid {
+	if answer.Result.Data.AccessToken == "" {
 		return errors.New("oops")
 	}
 
-	c.Token = token
+	c.Token = answer.Result.Data.AccessToken
 
 	return nil
 }
 
-func (c *Client) DoRequest(query string, variables map[string]interface{}) (map[string]interface{}, error) {
-	return c.DoRequestContext(context.Background(), query, variables)
-}
-
-// DoRequestContext is DoRequest, stopped when ctx is.
-func (c *Client) DoRequestContext(ctx context.Context, query string, variables map[string]interface{}) (map[string]interface{}, error) {
-	req := graphql.NewRequest(query)
-
-	if c.Token != "" {
-		req.Header.Set("Authorization", "Bearer "+c.Token)
-	}
-	if c.Workspace != "" {
-		req.Header.Set("customer", c.Workspace)
-	}
-
-	for key, value := range variables {
-		req.Var(key, value)
-	}
-
-	// run it and capture the response
-	var data map[string]interface{}
-	if err := c.graphQL().Run(ctx, req, &data); err != nil {
+// ListAccounts returns the workspace's cloud accounts, each one a JSON object.
+func (c *Client) ListAccounts(ctx context.Context) ([]interface{}, error) {
+	var accounts []interface{}
+	if err := c.DoAPIRequest(ctx, http.MethodGet, CloudAccountsPath, nil, &accounts); err != nil {
 		return nil, err
 	}
-
-	return data, nil
+	return accounts, nil
 }
 
-func (c *Client) DoRequestWithToken(query string, variables map[string]interface{}, authToken string) (map[string]interface{}, error) {
-	req := graphql.NewRequest(query)
-
-	req.Header.Set("Authorization", "Bearer "+authToken)
-
-	for key, value := range variables {
-		req.Var(key, value)
-	}
-
-	// define a Context for the request
-	ctx := context.Background()
-
-	// run it and capture the response
-	var data map[string]interface{}
-	if err := c.graphQL().Run(ctx, req, &data); err != nil {
-		return nil, err
-	}
-
-	return data, nil
-}
-
-// graphQL is the client NewClient made or, for a Client built without NewClient (as in
-// tests), one over HTTPClient.
-func (c *Client) graphQL() *graphql.Client {
-	if c.graphqlClient != nil {
-		return c.graphqlClient
-	}
-	return graphql.NewClient(fmt.Sprintf("https://%s/graphql", c.Host), graphql.WithHTTPClient(c.httpClient()))
+// CloudAccountPath is the public API's path to the cloud account with Stream Security id id.
+func CloudAccountPath(id string) string {
+	return CloudAccountsPath + "/" + escapeSegments(id)
 }

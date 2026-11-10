@@ -3,6 +3,7 @@ package provider
 import (
 	"context"
 	"fmt"
+	"net/http"
 	"terraform-provider-streamsec/internal/client"
 
 	"github.com/hashicorp/terraform-plugin-framework/path"
@@ -111,19 +112,6 @@ func (r *GoogleWorkspaceResource) Create(ctx context.Context, req resource.Creat
 		return
 	}
 
-	query := `
-		mutation CreateAccount($account_type: CloudProvider!, $cloud_account_id: String!, $display_name: String) {
-			createAccount(account: {
-				account_type: $account_type,
-				cloud_account_id: $cloud_account_id,
-				display_name: $display_name,
-			  })
-			{
-				_id
-				account_token
-			}
-	}`
-
 	variables := map[string]interface{}{
 		"account_type":     "GOOGLE_WORKSPACE",
 		"cloud_account_id": data.CloudAccountID.ValueString(),
@@ -134,7 +122,13 @@ func (r *GoogleWorkspaceResource) Create(ctx context.Context, req resource.Creat
 
 	tflog.Debug(ctx, fmt.Sprintf("variables: %v", variables))
 
-	res, err := r.client.DoRequest(query, variables)
+	var res map[string]interface{}
+	// The create has only ever sent these three; client_email and private_key go with an update.
+	err := r.client.DoAPIRequest(ctx, http.MethodPost, client.CloudAccountsPath, map[string]interface{}{
+		"account_type":     variables["account_type"],
+		"cloud_account_id": variables["cloud_account_id"],
+		"display_name":     variables["display_name"],
+	}, &res)
 
 	if err != nil {
 		resp.Diagnostics.AddError("Client Error", fmt.Sprintf("Unable to create account, got error: %s", err))
@@ -143,7 +137,7 @@ func (r *GoogleWorkspaceResource) Create(ctx context.Context, req resource.Creat
 
 	tflog.Debug(ctx, fmt.Sprintf("Response: %v", res))
 
-	account := res["createAccount"].(map[string]interface{})
+	account := res
 	data.ID = types.StringValue(account["_id"].(string))
 	data.AccountToken = types.StringValue(account["account_token"].(string))
 
@@ -165,26 +159,12 @@ func (r *GoogleWorkspaceResource) Read(ctx context.Context, req resource.ReadReq
 		return
 	}
 
-	query := `
-		query {
-			accounts {
-				_id
-				account_type
-				cloud_account_id
-				display_name
-				account_token
-				status
-			}
-		}`
-
-	res, err := r.client.DoRequest(query, nil)
+	accounts, err := r.client.ListAccounts(ctx)
 
 	if err != nil {
 		resp.Diagnostics.AddError("Client Error", fmt.Sprintf("Unable to get account, got error: %s", err))
 		return
 	}
-
-	accounts := res["accounts"].([]interface{})
 	accountFound := false
 
 	for _, acc := range accounts {
@@ -224,13 +204,6 @@ func (r *GoogleWorkspaceResource) Update(ctx context.Context, req resource.Updat
 
 	// check if there was a change in display_name
 	if data.DisplayName != state.DisplayName || data.ClientEmail != state.ClientEmail || data.PrivateKey != state.PrivateKey {
-		query := `
-			mutation UpdateAccount($id: ID!, $account: AccountUpdateInput) {
-				updateAccount(id: $id, account: $account) {
-					_id
-				}
-			}`
-
 		variables := map[string]interface{}{
 			"id": data.ID.ValueString(),
 			"account": map[string]interface{}{
@@ -241,7 +214,7 @@ func (r *GoogleWorkspaceResource) Update(ctx context.Context, req resource.Updat
 
 		tflog.Debug(ctx, fmt.Sprintf("variables: %v", variables))
 
-		_, err := r.client.DoRequest(query, variables)
+		err := r.client.DoAPIRequest(ctx, http.MethodPut, client.CloudAccountPath(data.ID.ValueString()), variables["account"], nil)
 
 		if err != nil {
 			resp.Diagnostics.AddError("Client Error", fmt.Sprintf("Unable to update account, got error: %s", err))
@@ -264,15 +237,7 @@ func (r *GoogleWorkspaceResource) Delete(ctx context.Context, req resource.Delet
 		return
 	}
 
-	query := `
-		mutation DeleteAccount($id: ID!) {
-			deleteAccount(id: $id)
-		}`
-
-	variables := map[string]interface{}{
-		"id": data.ID.ValueString()}
-
-	_, err := r.client.DoRequest(query, variables)
+	err := r.client.DoAPIRequest(ctx, http.MethodDelete, client.CloudAccountPath(data.ID.ValueString()), nil, nil)
 
 	if err != nil {
 		resp.Diagnostics.AddError("Client Error", fmt.Sprintf("Unable to delete account, got error: %s", err))

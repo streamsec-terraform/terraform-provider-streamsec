@@ -3,6 +3,7 @@ package provider
 import (
 	"context"
 	"fmt"
+	"net/http"
 	"terraform-provider-streamsec/internal/client"
 
 	"github.com/hashicorp/terraform-plugin-framework/path"
@@ -100,29 +101,16 @@ func (r *AzureTenantResource) Create(ctx context.Context, req resource.CreateReq
 		return
 	}
 
-	query := `
-		mutation CreateAzurePortalAccount($account_type: CloudProvider!, $display_name: String!, $tenant_id: String!) {
-			createAccount(account: {
-				account_type: $account_type,
-				display_name: $display_name,
-				cloud_account_id: $tenant_id
-			  })
-			{
-				_id
-				external_id
-				account_token
-			}
-	}`
-
 	variables := map[string]interface{}{
-		"account_type": "Azure",
-		"display_name": data.DisplayName.ValueString(),
-		"tenant_id":    data.CloudAccountID.ValueString(),
+		"account_type":     "Azure",
+		"display_name":     data.DisplayName.ValueString(),
+		"cloud_account_id": data.CloudAccountID.ValueString(),
 	}
 
 	tflog.Debug(ctx, fmt.Sprintf("variables: %v", variables))
 
-	res, err := r.client.DoRequest(query, variables)
+	var res map[string]interface{}
+	err := r.client.DoAPIRequest(ctx, http.MethodPost, client.CloudAccountsPath, variables, &res)
 
 	if err != nil {
 		resp.Diagnostics.AddError("Client Error", fmt.Sprintf("Unable to create account, got error: %s", err))
@@ -131,7 +119,7 @@ func (r *AzureTenantResource) Create(ctx context.Context, req resource.CreateReq
 
 	tflog.Debug(ctx, fmt.Sprintf("Response: %v", res))
 
-	account := res["createAccount"].(map[string]interface{})
+	account := res
 	data.ID = types.StringValue(account["_id"].(string))
 	data.AccountToken = types.StringValue(account["account_token"].(string))
 
@@ -153,29 +141,12 @@ func (r *AzureTenantResource) Read(ctx context.Context, req resource.ReadRequest
 		return
 	}
 
-	query := `
-		query {
-			accounts {
-				_id
-				account_type
-				cloud_account_id
-				display_name
-				cloud_regions
-				external_id
-				lightlytics_collection_token
-				account_token
-				status
-			}
-		}`
-
-	res, err := r.client.DoRequest(query, nil)
+	accounts, err := r.client.ListAccounts(ctx)
 
 	if err != nil {
 		resp.Diagnostics.AddError("Client Error", fmt.Sprintf("Unable to get account, got error: %s", err))
 		return
 	}
-
-	accounts := res["accounts"].([]interface{})
 	accountFound := false
 	tflog.Debug(ctx, fmt.Sprintf("Accounts: %v", accounts))
 
@@ -216,13 +187,6 @@ func (r *AzureTenantResource) Update(ctx context.Context, req resource.UpdateReq
 
 	// check if there was a change in display_name
 	if data.DisplayName != state.DisplayName {
-		query := `
-			mutation UpdateAccount($id: ID!, $account: AccountUpdateInput) {
-				updateAccount(id: $id, account: $account) {
-					_id
-				}
-			}`
-
 		variables := map[string]interface{}{
 			"id": data.ID.ValueString(),
 			"account": map[string]interface{}{
@@ -230,7 +194,7 @@ func (r *AzureTenantResource) Update(ctx context.Context, req resource.UpdateReq
 
 		tflog.Debug(ctx, fmt.Sprintf("variables: %v", variables))
 
-		_, err := r.client.DoRequest(query, variables)
+		err := r.client.DoAPIRequest(ctx, http.MethodPut, client.CloudAccountPath(data.ID.ValueString()), variables["account"], nil)
 
 		if err != nil {
 			resp.Diagnostics.AddError("Client Error", fmt.Sprintf("Unable to update account, got error: %s", err))
@@ -253,15 +217,7 @@ func (r *AzureTenantResource) Delete(ctx context.Context, req resource.DeleteReq
 		return
 	}
 
-	query := `
-		mutation DeleteAccount($id: ID!) {
-			deleteAccount(id: $id)
-		}`
-
-	variables := map[string]interface{}{
-		"id": data.ID.ValueString()}
-
-	_, err := r.client.DoRequest(query, variables)
+	err := r.client.DoAPIRequest(ctx, http.MethodDelete, client.CloudAccountPath(data.ID.ValueString()), nil, nil)
 
 	if err != nil {
 		resp.Diagnostics.AddError("Client Error", fmt.Sprintf("Unable to delete account, got error: %s", err))

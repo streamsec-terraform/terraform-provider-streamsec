@@ -148,7 +148,7 @@ func TestDoRESTRequestGetSendsNoBodyAndKeepsQuery(t *testing.T) {
 }
 
 // A provider configured with an api_token and no workspace_id sends no customer
-// header, like the GraphQL path; one without a token sends no Authorization.
+// header; one without a token sends no Authorization.
 func TestDoRESTRequestOmitsEmptyCredentials(t *testing.T) {
 	srv, captured := newRESTTestServer(t, http.StatusOK, `{}`)
 
@@ -177,6 +177,8 @@ func TestDoRESTRequestNon2xxIsAPIErrorWithDetail(t *testing.T) {
 		// A failed proxied call can come back as {"error": ...}.
 		{"error field", http.StatusConflict, `{"error":"Request failed with status code 409"}`, "Request failed with status code 409"},
 		{"validation detail list", http.StatusUnprocessableEntity, `{"detail":[{"loc":["body"],"msg":"field required"}]}`, `[{"loc":["body"],"msg":"field required"}]`},
+		{"public API message", http.StatusForbidden, `{"message":"Forbidden","code":"FORBIDDEN"}`, "Forbidden"},
+		{"login error object", http.StatusUnauthorized, `{"error":{"message":"Incorrect username or password","code":-32001}}`, "Incorrect username or password"},
 		{"plain text", http.StatusBadGateway, "upstream down\n", "upstream down"},
 		{"empty", http.StatusNotFound, "", ""},
 	}
@@ -230,21 +232,79 @@ func TestDoRESTRequestTruncatesOnARuneBoundary(t *testing.T) {
 	}
 }
 
-// A Client built without NewClient, as in tests, runs GraphQL over its HTTPClient.
-func TestDoRequestUsesHTTPClientWithoutNewClient(t *testing.T) {
-	srv, captured := newRESTTestServer(t, http.StatusOK, `{"data":{"accounts":[{"_id":"a1","account_type":"AWS"}]}}`)
+// The public API answers without a data envelope.
+func TestListAccountsReadsThePublicAPI(t *testing.T) {
+	srv, captured := newRESTTestServer(t, http.StatusOK, `[{"_id":"a1","account_type":"AWS"}]`)
 
-	data, err := restTestClient(srv, "tok", "ws").DoRequest(`query { accounts { _id account_type } }`, nil)
+	accounts, err := restTestClient(srv, "tok", "ws").ListAccounts(context.Background())
 	if err != nil {
-		t.Fatalf("DoRequest: %s", err)
+		t.Fatalf("ListAccounts: %s", err)
 	}
 	req := captured.get(t, 0)
-	if req.method != http.MethodPost || req.uri != "/graphql" || req.headers.Get("Authorization") != "Bearer tok" || req.headers.Get("customer") != "ws" {
+	if req.method != http.MethodGet || req.uri != CloudAccountsPath || req.headers.Get("Authorization") != "Bearer tok" || req.headers.Get("customer") != "ws" {
 		t.Errorf("request = %s %s %v", req.method, req.uri, req.headers)
 	}
-	accounts, _ := data["accounts"].([]interface{})
-	if len(accounts) != 1 {
-		t.Errorf("data = %v", data)
+	if len(accounts) != 1 || accounts[0].(map[string]interface{})["_id"] != "a1" {
+		t.Errorf("accounts = %v", accounts)
+	}
+}
+
+// An account acknowledgement carries the account's own token and no workspace.
+func TestDoRESTRequestWithTokenSendsOnlyThatToken(t *testing.T) {
+	srv, captured := newRESTTestServer(t, http.StatusOK, `"ok"`)
+
+	var out string
+	err := restTestClient(srv, "tok", "ws").DoRESTRequestWithToken(context.Background(), http.MethodPost,
+		AccountsPath("acc-1", "acknowledge"), "account-tok", map[string]string{"role_arn": "r"}, &out)
+	if err != nil {
+		t.Fatalf("DoRESTRequestWithToken: %s", err)
+	}
+	req := captured.get(t, 0)
+	if req.method != http.MethodPost || req.uri != "/api/accounts/accounts/acc-1/acknowledge" {
+		t.Errorf("request = %s %s", req.method, req.uri)
+	}
+	if got := req.headers.Get("Authorization"); got != "Bearer account-tok" {
+		t.Errorf("Authorization = %q, want the account's token", got)
+	}
+	if _, ok := req.headers["Customer"]; ok {
+		t.Errorf("sent a customer header")
+	}
+	if string(req.body) != `{"role_arn":"r"}` || out != "ok" {
+		t.Errorf("body = %s, out = %q", req.body, out)
+	}
+}
+
+func TestAuthenticateLogsInAndKeepsTheAccessToken(t *testing.T) {
+	srv, captured := newRESTTestServer(t, http.StatusOK, `{"result":{"data":{"access_token":"session-tok","refresh_token":"r"}}}`)
+	c := restTestClient(srv, "", "ws")
+	email, password := "me@example.com", "secret"
+
+	if err := c.authenticate(&email, &password); err != nil {
+		t.Fatalf("authenticate: %s", err)
+	}
+	req := captured.get(t, 0)
+	if req.method != http.MethodPost || req.uri != "/trpc/auth.login" {
+		t.Errorf("request = %s %s", req.method, req.uri)
+	}
+	var body map[string]string
+	if err := json.Unmarshal(req.body, &body); err != nil || body["email"] != email || body["password"] != password {
+		t.Errorf("body = %s", req.body)
+	}
+	if _, ok := req.headers["Authorization"]; ok {
+		t.Errorf("sent an Authorization header before logging in")
+	}
+	if c.Token != "session-tok" {
+		t.Errorf("Token = %q, want the access token", c.Token)
+	}
+}
+
+func TestAuthenticateWrongPasswordIsAnError(t *testing.T) {
+	srv, _ := newRESTTestServer(t, http.StatusUnauthorized, `{"error":{"message":"Incorrect username or password","code":-32001}}`)
+	email, password := "me@example.com", "wrong"
+
+	err := restTestClient(srv, "", "ws").authenticate(&email, &password)
+	if err == nil || !strings.Contains(err.Error(), "Incorrect username or password") {
+		t.Fatalf("err = %v, want the login's reason", err)
 	}
 }
 
@@ -291,7 +351,7 @@ func TestDoRESTRequestReusesTheConnection(t *testing.T) {
 	}
 }
 
-func TestDoRequestContextStopsWithItsContext(t *testing.T) {
+func TestDoAPIRequestStopsWithItsContext(t *testing.T) {
 	release := make(chan struct{})
 	srv := httptest.NewTLSServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		select {
@@ -303,7 +363,7 @@ func TestDoRequestContextStopsWithItsContext(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), 100*time.Millisecond)
 	defer cancel()
 
-	_, err := restTestClient(srv, "tok", "ws").DoRequestContext(ctx, `query { accounts { _id } }`, nil)
+	_, err := restTestClient(srv, "tok", "ws").ListAccounts(ctx)
 	if !errors.Is(err, context.DeadlineExceeded) {
 		t.Fatalf("err = %v, want the context's deadline", err)
 	}

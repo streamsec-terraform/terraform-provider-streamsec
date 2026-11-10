@@ -129,28 +129,12 @@ func (r *GCPResponseAckResource) Create(ctx context.Context, req resource.Create
 		return
 	}
 
-	query := `
-		query {
-			accounts {
-				_id
-				cloud_account_id
-				account_token
-				remediation {
-					status
-					runbook_list
-					location
-				}
-			}
-		}`
-
-	res, err := r.client.DoRequest(query, nil)
+	accounts, err := r.client.ListAccounts(ctx)
 
 	if err != nil {
 		resp.Diagnostics.AddError("Client Error", fmt.Sprintf("Unable to get account, got error: %s", err))
 		return
 	}
-
-	accounts := res["accounts"].([]interface{})
 	accountFound := false
 
 	for _, acc := range accounts {
@@ -212,7 +196,7 @@ func (r *GCPResponseAckResource) Create(ctx context.Context, req resource.Create
 		return
 	}
 
-	tflog.Debug(ctx, fmt.Sprintf("Response: %v", res))
+	tflog.Debug(ctx, fmt.Sprintf("Response: %v", accounts))
 
 	// Write logs using the tflog package
 	// Documentation: https://terraform.io/plugin/log
@@ -232,29 +216,12 @@ func (r *GCPResponseAckResource) Read(ctx context.Context, req resource.ReadRequ
 		return
 	}
 
-	query := `
-		query {
-			accounts {
-				_id
-				cloud_account_id
-				account_token
-				remediation {
-					status
-					runbook_list
-					location
-					template_version
-				}
-			}
-		}`
-
-	res, err := r.client.DoRequest(query, nil)
+	accounts, err := r.client.ListAccounts(ctx)
 
 	if err != nil {
 		resp.Diagnostics.AddError("Client Error", fmt.Sprintf("Unable to get account, got error: %s", err))
 		return
 	}
-
-	accounts := res["accounts"].([]interface{})
 	accountFound := false
 
 	for _, acc := range accounts {
@@ -300,28 +267,12 @@ func (r *GCPResponseAckResource) Update(ctx context.Context, req resource.Update
 		return
 	}
 
-	query := `
-		query {
-			accounts {
-				_id
-				cloud_account_id
-				account_token
-				remediation {
-					status
-					runbook_list
-					location
-				}
-			}
-		}`
-
-	res, err := r.client.DoRequest(query, nil)
+	accounts, err := r.client.ListAccounts(ctx)
 
 	if err != nil {
 		resp.Diagnostics.AddError("Client Error", fmt.Sprintf("Unable to get account, got error: %s", err))
 		return
 	}
-
-	accounts := res["accounts"].([]interface{})
 	accountFound := false
 
 	for _, acc := range accounts {
@@ -376,7 +327,7 @@ func (r *GCPResponseAckResource) Update(ctx context.Context, req resource.Update
 		return
 	}
 
-	tflog.Debug(ctx, fmt.Sprintf("Response: %v", res))
+	tflog.Debug(ctx, fmt.Sprintf("Response: %v", accounts))
 
 	// Write logs using the tflog package
 	tflog.Trace(ctx, "updated a resource")

@@ -161,7 +161,7 @@ func (r *AWSScannerHubResource) Create(ctx context.Context, req resource.CreateR
 	resp.Diagnostics.Append(resp.State.Set(ctx, &data)...)
 }
 
-// awsAccountCheckTimeout bounds requireAWSAccount's query: the GraphQL client has no timeout.
+// awsAccountCheckTimeout bounds requireAWSAccount's call.
 var awsAccountCheckTimeout = time.Minute
 
 // requireAWSAccount refuses an account that is not AWS. The Stream API takes a hub's cloud
@@ -171,12 +171,11 @@ var awsAccountCheckTimeout = time.Minute
 func (r *AWSScannerHubResource) requireAWSAccount(ctx context.Context, accountID string, diags *diag.Diagnostics) {
 	ctx, cancel := context.WithTimeout(ctx, awsAccountCheckTimeout)
 	defer cancel()
-	res, err := r.client.DoRequestContext(ctx, `query { accounts { _id account_type } }`, nil)
+	accounts, err := r.client.ListAccounts(ctx)
 	if err != nil {
 		diags.AddError("Unable to read the accounts", fmt.Sprintf("Checking that account %s is an AWS account: %s", accountID, err))
 		return
 	}
-	accounts, _ := res["accounts"].([]interface{})
 	for _, item := range accounts {
 		account, _ := item.(map[string]interface{})
 		if id, _ := account["_id"].(string); id != accountID {

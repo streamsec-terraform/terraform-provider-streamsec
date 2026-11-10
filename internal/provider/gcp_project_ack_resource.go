@@ -114,25 +114,12 @@ func (r *GCPProjectAckResource) Create(ctx context.Context, req resource.CreateR
 		return
 	}
 
-	query := `
-		query {
-			accounts {
-				_id
-				account_type
-				cloud_account_id
-				display_name
-				account_token
-			}
-		}`
-
-	res, err := r.client.DoRequest(query, nil)
+	accounts, err := r.client.ListAccounts(ctx)
 
 	if err != nil {
 		resp.Diagnostics.AddError("Client Error", fmt.Sprintf("Unable to get account, got error: %s", err))
 		return
 	}
-
-	accounts := res["accounts"].([]interface{})
 	accountFound := false
 
 	for _, acc := range accounts {
@@ -195,7 +182,7 @@ func (r *GCPProjectAckResource) Create(ctx context.Context, req resource.CreateR
 		return
 	}
 
-	tflog.Debug(ctx, fmt.Sprintf("Response: %v", res))
+	tflog.Debug(ctx, fmt.Sprintf("Response: %v", accounts))
 
 	// Write logs using the tflog package
 	// Documentation: https://terraform.io/plugin/log
@@ -215,24 +202,12 @@ func (r *GCPProjectAckResource) Read(ctx context.Context, req resource.ReadReque
 		return
 	}
 
-	query := `
-		query {
-			accounts {
-				_id
-				cloud_account_id
-				client_email
-				account_token
-			}
-		}`
-
-	res, err := r.client.DoRequest(query, nil)
+	accounts, err := r.client.ListAccounts(ctx)
 
 	if err != nil {
 		resp.Diagnostics.AddError("Client Error", fmt.Sprintf("Unable to get account, got error: %s", err))
 		return
 	}
-
-	accounts := res["accounts"].([]interface{})
 	accountFound := false
 	stateID := data.ID.ValueString()
 
@@ -279,13 +254,6 @@ func (r *GCPProjectAckResource) Update(ctx context.Context, req resource.UpdateR
 
 	// check if there was a change in display_name
 	if data.ClientEmail != state.ClientEmail || data.PrivateKey != state.PrivateKey {
-		query := `
-			mutation UpdateAccount($id: ID!, $account: AccountUpdateInput) {
-				updateAccount(id: $id, account: $account) {
-					_id
-				}
-			}`
-
 		variables := map[string]interface{}{
 			"id": data.ID.ValueString(),
 			"account": map[string]interface{}{
@@ -296,7 +264,7 @@ func (r *GCPProjectAckResource) Update(ctx context.Context, req resource.UpdateR
 
 		tflog.Debug(ctx, fmt.Sprintf("variables: %v", variables))
 
-		_, err := r.client.DoRequest(query, variables)
+		err := r.client.DoAPIRequest(ctx, http.MethodPut, client.CloudAccountPath(data.ID.ValueString()), variables["account"], nil)
 
 		if err != nil {
 			resp.Diagnostics.AddError("Client Error", fmt.Sprintf("Unable to update account, got error: %s", err))

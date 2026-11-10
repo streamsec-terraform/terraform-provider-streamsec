@@ -49,17 +49,17 @@ func hubModel(coverage string, accountIDs types.Set) AWSScannerHubResourceModel 
 	}
 }
 
-// Create first checks over GraphQL that account_id is an AWS account.
-var accountsCall = apiCall{Method: http.MethodPost, URI: "/graphql", AnyBody: true}
+// Create first checks in the account list that account_id is an AWS account.
+var accountsCall = apiCall{Method: http.MethodGet, URI: client.CloudAccountsPath}
 
 func accountsAnswer(accounts string) fakeResponse {
-	return fakeResponse{200, `{"data":{"accounts":` + accounts + `}}`}
+	return fakeResponse{200, accounts}
 }
 
 func createRoutes(put fakeResponse) map[string]fakeResponse {
 	return map[string]fakeResponse{
-		"POST /graphql":  accountsAnswer(`[{"_id":"acc-a","account_type":"AWS"},{"_id":"hub-1","account_type":"AWS"},{"_id":"gcp-1","account_type":"GCP"}]`),
-		"PUT " + hubPath: put,
+		"GET " + client.CloudAccountsPath: accountsAnswer(`[{"_id":"acc-a","account_type":"AWS"},{"_id":"hub-1","account_type":"AWS"},{"_id":"gcp-1","account_type":"GCP"}]`),
+		"PUT " + hubPath:                  put,
 	}
 }
 
@@ -159,7 +159,7 @@ func TestScannerHubCreateRefusesAnUnknownAccount(t *testing.T) {
 }
 
 func TestScannerHubCreateAccountsQueryFailureIsAnError(t *testing.T) {
-	api, c := newFakeAPI(t, map[string]fakeResponse{"POST /graphql": {200, `{"errors":[{"message":"No authorized"}]}`}})
+	api, c := newFakeAPI(t, map[string]fakeResponse{"GET " + client.CloudAccountsPath: {403, `{"message":"No authorized","code":"FORBIDDEN"}`}})
 	r := NewAWSScannerHubResource()
 	s := configured(t, r, c)
 
@@ -167,20 +167,6 @@ func TestScannerHubCreateAccountsQueryFailureIsAnError(t *testing.T) {
 
 	requireError(t, diags, "No authorized")
 	api.expectCalls(accountsCall)
-}
-
-func TestScannerHubCreateAsksForTheAccountType(t *testing.T) {
-	api, c := newFakeAPI(t, createRoutes(fakeResponse{200, `{}`}))
-	r := NewAWSScannerHubResource()
-	s := configured(t, r, c)
-
-	_, diags := doCreate(t, r, s, hubModel("all", types.SetNull(types.StringType)))
-	requireNoDiags(t, diags)
-
-	query, _ := api.recorded()[0].Body["query"].(string)
-	if !strings.Contains(query, "accounts") || !strings.Contains(query, "_id") || !strings.Contains(query, "account_type") {
-		t.Errorf("GraphQL query = %q, want accounts' _id and account_type", query)
-	}
 }
 
 // silentAPI takes every call and never answers it: only the caller can end one.
