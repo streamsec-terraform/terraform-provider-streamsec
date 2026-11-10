@@ -33,7 +33,7 @@ func NewAWSScannerHubResource() resource.Resource {
 }
 
 // AWSScannerHubResource makes an AWS account's agentless scanner a hub that also
-// scans other AWS accounts (DEV-23499), through ms_accounts' scanner-hub routes.
+// scans other AWS accounts, through the Stream API's scanner-hub routes.
 type AWSScannerHubResource struct {
 	client *client.Client
 }
@@ -71,7 +71,7 @@ var scannerHubHints = statusHints{
 		"account_ids is already scanned by another hub. Change that hub's coverage first. " + pinnedAccountNote,
 }
 
-// Kept in the backend by design, and not in account_ids, so Read can't show it.
+// Kept by the Stream API by design, and not in account_ids, so Read can't show it.
 const pinnedAccountNote = `An account may also still be pinned to another hub that scanned it while its coverage was "selected", ` +
 	`after that hub switched to "all": to release it, set that hub to "selected" without the account, apply, then set it back to "all".`
 
@@ -164,7 +164,7 @@ func (r *AWSScannerHubResource) Create(ctx context.Context, req resource.CreateR
 // awsAccountCheckTimeout bounds requireAWSAccount's call.
 var awsAccountCheckTimeout = time.Minute
 
-// requireAWSAccount refuses an account that is not AWS. ms_accounts takes a hub's cloud
+// requireAWSAccount refuses an account that is not AWS. The Stream API takes a hub's cloud
 // from its account, so a GCP project's id would make a GCP hub, which Read (AWS hubs
 // only) never finds and destroy never turns off. account_id replaces the resource, so
 // Create is the only place it can change.

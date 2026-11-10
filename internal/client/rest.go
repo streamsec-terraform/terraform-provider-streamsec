@@ -31,7 +31,8 @@ type APIError struct {
 	Method     string
 	Path       string
 	StatusCode int
-	// Detail is the reason given: the answer's "detail", "error" or "message", or the body itself.
+	// Detail is the reason given: the body's "detail" field, else its "error" field, else its
+	// "message" field, else the body itself.
 	Detail string
 }
 
@@ -43,7 +44,8 @@ func (e *APIError) Error() string {
 	return msg
 }
 
-// AccountsPath is the REST path /api/accounts/accounts/<segments>, with each segment escaped.
+// AccountsPath is the Stream API's REST path to one of its /accounts routes,
+// /api/accounts/accounts/<segments>, with each segment escaped.
 func AccountsPath(segments ...string) string {
 	return "/api/accounts/accounts/" + escapeSegments(segments...)
 }
@@ -156,8 +158,8 @@ func errorDetail(body []byte) string {
 			if len(raw) == 0 || string(raw) == "null" {
 				continue
 			}
-			// A string, an object's message (as the login answers), or as is: FastAPI's
-			// validation errors are a list.
+			// A string, an object's message (as the login answers), or as is: validation
+			// errors come as a list.
 			var reason string
 			var object struct {
 				Message string `json:"message"`
