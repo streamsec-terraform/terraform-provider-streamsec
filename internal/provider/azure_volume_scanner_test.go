@@ -66,6 +66,24 @@ func TestAzureVolumeScannerAckWithoutAResourceGroupSendsNone(t *testing.T) {
 	}})
 }
 
+// A hub's access template in the console grants the identity whose principal id the
+// acknowledgement carries.
+func TestAzureVolumeScannerAckSendsTheIdentitysPrincipal(t *testing.T) {
+	api, c := newFakeAPI(t, map[string]fakeResponse{"PUT " + azureAckPath: {200, `{}`}})
+	r := NewAzureVolumeScannerAckResource()
+	s := configured(t, r, c)
+
+	model := azureAckModel("1.6.0", types.StringNull())
+	model.PrincipalID = types.StringValue("00000000-0000-0000-0000-00000000000a")
+	_, diags := doCreate(t, r, s, model)
+	requireNoDiags(t, diags)
+
+	api.expectCalls(apiCall{Method: http.MethodPut, URI: azureAckPath, Body: map[string]interface{}{
+		"subscription_id": azureSubscription, "status": "deployed", "module_version": "1.6.0",
+		"principal_id": "00000000-0000-0000-0000-00000000000a",
+	}})
+}
+
 func TestAzureVolumeScannerAckUpdateAcknowledgesTheNewVersion(t *testing.T) {
 	api, c := newFakeAPI(t, map[string]fakeResponse{"PUT " + azureAckPath: {200, `{}`}})
 	r := NewAzureVolumeScannerAckResource()

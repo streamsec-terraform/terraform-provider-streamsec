@@ -70,6 +70,17 @@ func TestScannerHubSchemasAsTerraformSeesThem(t *testing.T) {
 			"coverage":    {typ: tftypes.String, required: true},
 			"account_ids": {typ: stringSetType, optional: true},
 		}},
+		{"resource streamsec_gcp_scanner_hub", resp.ResourceSchemas["streamsec_gcp_scanner_hub"], map[string]wantAttribute{
+			"account_id":  {typ: tftypes.String, required: true},
+			"coverage":    {typ: tftypes.String, required: true},
+			"account_ids": {typ: stringSetType, optional: true},
+		}},
+		{"resource streamsec_azure_scanner_hub", resp.ResourceSchemas["streamsec_azure_scanner_hub"], map[string]wantAttribute{
+			"account_id":       {typ: tftypes.String, required: true},
+			"subscription_id":  {typ: tftypes.String, required: true},
+			"coverage":         {typ: tftypes.String, required: true},
+			"subscription_ids": {typ: stringSetType, optional: true},
+		}},
 		{"resource streamsec_aws_volume_scanner_ack", resp.ResourceSchemas["streamsec_aws_volume_scanner_ack"], map[string]wantAttribute{
 			"account_id":     {typ: tftypes.String, required: true},
 			"region":         {typ: tftypes.String, required: true},
@@ -84,6 +95,7 @@ func TestScannerHubSchemasAsTerraformSeesThem(t *testing.T) {
 			"subscription_id": {typ: tftypes.String, required: true},
 			"module_version":  {typ: tftypes.String, required: true},
 			"resource_group":  {typ: tftypes.String, optional: true},
+			"principal_id":    {typ: tftypes.String, optional: true},
 		}},
 		{"data source streamsec_azure_volume_scanner", resp.DataSourceSchemas["streamsec_azure_volume_scanner"], map[string]wantAttribute{
 			"account_id":       {typ: tftypes.String, required: true},
@@ -150,6 +162,20 @@ var nullStr = tftypes.NewValue(tftypes.String, nil)
 func azureAck(accountID, subscriptionID, version string, resourceGroup tftypes.Value) map[string]tftypes.Value {
 	return map[string]tftypes.Value{
 		"account_id": str(accountID), "subscription_id": str(subscriptionID), "module_version": str(version), "resource_group": resourceGroup,
+		"principal_id": nullStr,
+	}
+}
+
+// The module sends the identity's resource group with it: Stream Security looks for the identity there.
+func azureAckWithPrincipal(principalID string) map[string]tftypes.Value {
+	attrs := azureAck(azureAccount, azureSubscription, "1.6.0", str("streamsec-scanner-tf"))
+	attrs["principal_id"] = str(principalID)
+	return attrs
+}
+
+func azureHub(accountID, subscriptionID, coverage string, subscriptionIDs tftypes.Value) map[string]tftypes.Value {
+	return map[string]tftypes.Value{
+		"account_id": str(accountID), "subscription_id": str(subscriptionID), "coverage": str(coverage), "subscription_ids": subscriptionIDs,
 	}
 }
 
@@ -174,6 +200,17 @@ func TestScannerHubConfigValidation(t *testing.T) {
 			map[string]tftypes.Value{"account_id": str("hub-1"), "coverage": str("all"), "account_ids": strSet("acc-a")}, "account_ids"},
 		{"empty account id in account_ids", "streamsec_aws_scanner_hub",
 			map[string]tftypes.Value{"account_id": str("hub-1"), "coverage": str("selected"), "account_ids": strSet("")}, "account_ids"},
+		{"gcp selected needs account_ids", "streamsec_gcp_scanner_hub",
+			map[string]tftypes.Value{"account_id": str("gcp-hub"), "coverage": str("selected"), "account_ids": nullStrSet}, "account_ids"},
+		{"gcp all", "streamsec_gcp_scanner_hub",
+			map[string]tftypes.Value{"account_id": str("gcp-hub"), "coverage": str("all"), "account_ids": nullStrSet}, ""},
+		{"azure hub selected", "streamsec_azure_scanner_hub", azureHub(azureAccount, azureSubscription, "selected", strSet("00000000-0000-0000-0000-0000000000b2")), ""},
+		{"azure hub all", "streamsec_azure_scanner_hub", azureHub(azureAccount, azureSubscription, "all", nullStrSet), ""},
+		{"azure hub selected needs subscription_ids", "streamsec_azure_scanner_hub", azureHub(azureAccount, azureSubscription, "selected", nullStrSet), "subscription_ids"},
+		{"azure hub all takes no subscription_ids", "streamsec_azure_scanner_hub", azureHub(azureAccount, azureSubscription, "all", strSet("00000000-0000-0000-0000-0000000000b2")), "subscription_ids"},
+		{"azure hub takes the Stream Security id", "streamsec_azure_scanner_hub", azureHub("11111111-2222-3333-4444-555555555555", azureSubscription, "all", nullStrSet), "account_id"},
+		{"azure hub subscription in uppercase", "streamsec_azure_scanner_hub", azureHub(azureAccount, "ABCDEF00-1111-2222-3333-444444444444", "all", nullStrSet), "subscription_id"},
+		{"azure hub covered subscription not a GUID", "streamsec_azure_scanner_hub", azureHub(azureAccount, azureSubscription, "selected", strSet("production")), "subscription_ids"},
 		{"spoke id is 12 digits", "streamsec_aws_scanner_access_ack",
 			map[string]tftypes.Value{"hub_account_id": str("hub-1"), "spoke_cloud_account_id": str("4444")}, "spoke_cloud_account_id"},
 		{"spoke ok", "streamsec_aws_scanner_access_ack",
@@ -209,6 +246,13 @@ func TestScannerHubConfigValidation(t *testing.T) {
 		{"azure module_version not a version", "streamsec_azure_volume_scanner_ack", azureAck(azureAccount, azureSubscription, "latest", nullStr), "module_version"},
 		{"azure resource group with a space", "streamsec_azure_volume_scanner_ack", azureAck(azureAccount, azureSubscription, "1.6.0", str("scanner rg")), "resource_group"},
 		{"azure resource group over 90 characters", "streamsec_azure_volume_scanner_ack", azureAck(azureAccount, azureSubscription, "1.6.0", str(strings.Repeat("r", 91))), "resource_group"},
+		{"azure ack with the identity's principal", "streamsec_azure_volume_scanner_ack", azureAckWithPrincipal("00000000-0000-0000-0000-00000000000a"), ""},
+		{"azure ack principal not a GUID", "streamsec_azure_volume_scanner_ack", azureAckWithPrincipal("streamsec-scanner-mi"), "principal_id"},
+		{"azure ack principal without its resource group", "streamsec_azure_volume_scanner_ack", func() map[string]tftypes.Value {
+			attrs := azureAckWithPrincipal("00000000-0000-0000-0000-00000000000a")
+			attrs["resource_group"] = nullStr
+			return attrs
+		}(), "principal_id"},
 		{"azure resource group of 90 letters", "streamsec_azure_volume_scanner_ack", azureAck(azureAccount, azureSubscription, "1.6.0", str(strings.Repeat("ü", 90))), ""},
 	}
 	for _, tc := range cases {
@@ -275,6 +319,19 @@ func TestScannerHubPlanReplacesOnIdentityChanges(t *testing.T) {
 			azureAck(azureAccount, azureSubscription, "1.7.0", nullStr), ""},
 		{"azure ack resource group", "streamsec_azure_volume_scanner_ack", azureAck(azureAccount, azureSubscription, "1.6.0", nullStr),
 			azureAck(azureAccount, azureSubscription, "1.6.0", str("streamsec-scanner-tf")), ""},
+		{"azure ack principal", "streamsec_azure_volume_scanner_ack", azureAckWithPrincipal("00000000-0000-0000-0000-00000000000a"),
+			azureAckWithPrincipal("00000000-0000-0000-0000-00000000000b"), ""},
+		{"gcp hub project", "streamsec_gcp_scanner_hub", hub("hub-1", "all", nullStrSet), hub("hub-2", "all", nullStrSet), "account_id"},
+		{"gcp hub projects", "streamsec_gcp_scanner_hub", hub("hub-1", "selected", strSet("project-a")), hub("hub-1", "selected", strSet("project-b")), ""},
+		{"azure hub tenant", "streamsec_azure_scanner_hub", azureHub(azureAccount, azureSubscription, "all", nullStrSet),
+			azureHub("64b7f9a1c2d3e4f5a6b7c8d0", azureSubscription, "all", nullStrSet), "account_id"},
+		{"azure hub subscription", "streamsec_azure_scanner_hub", azureHub(azureAccount, azureSubscription, "all", nullStrSet),
+			azureHub(azureAccount, "00000000-1111-2222-3333-555555555555", "all", nullStrSet), "subscription_id"},
+		{"azure hub coverage", "streamsec_azure_scanner_hub", azureHub(azureAccount, azureSubscription, "all", nullStrSet),
+			azureHub(azureAccount, azureSubscription, "selected", strSet("00000000-0000-0000-0000-0000000000b2")), ""},
+		{"azure hub covered subscriptions", "streamsec_azure_scanner_hub",
+			azureHub(azureAccount, azureSubscription, "selected", strSet("00000000-0000-0000-0000-0000000000b2")),
+			azureHub(azureAccount, azureSubscription, "selected", strSet("00000000-0000-0000-0000-0000000000b3")), ""},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
@@ -387,6 +444,7 @@ func TestAzureVolumeScannerAckPlanKeepsItsIdsWhileUnknown(t *testing.T) {
 	}
 	config := objectValue(t, schema, map[string]tftypes.Value{
 		"account_id": unknown, "subscription_id": unknown, "module_version": str("1.6.0"), "resource_group": nullStr,
+		"principal_id": nullStr,
 	})
 	out, err := server.PlanResourceChange(context.Background(), &tfprotov6.PlanResourceChangeRequest{
 		TypeName:         "streamsec_azure_volume_scanner_ack",
@@ -439,5 +497,48 @@ func TestScannerHubImportThroughTheProvider(t *testing.T) {
 	var accountID string
 	if err := attrs["account_id"].As(&accountID); err != nil || accountID != "hub-1" {
 		t.Errorf("imported account_id = %q (%v), want hub-1", accountID, err)
+	}
+}
+
+// An Azure hub is imported by its name in Stream Security, "<account_id>:<subscription_id>".
+func TestAzureScannerHubImportSplitsTheHubsName(t *testing.T) {
+	server, resp := protocolServer(t)
+
+	out, err := server.ImportResourceState(context.Background(), &tfprotov6.ImportResourceStateRequest{
+		TypeName: "streamsec_azure_scanner_hub",
+		ID:       azureAccount + ":" + azureSubscription,
+	})
+	if err != nil {
+		t.Fatalf("ImportResourceState: %s", err)
+	}
+	requireNoProtocolErrors(t, out.Diagnostics)
+	if len(out.ImportedResources) != 1 {
+		t.Fatalf("imported %d resources, want 1", len(out.ImportedResources))
+	}
+	value, err := out.ImportedResources[0].State.Unmarshal(resp.ResourceSchemas["streamsec_azure_scanner_hub"].ValueType())
+	if err != nil {
+		t.Fatalf("Unmarshal: %s", err)
+	}
+	var attrs map[string]tftypes.Value
+	if err := value.As(&attrs); err != nil {
+		t.Fatalf("As: %s", err)
+	}
+	var accountID, subscriptionID string
+	if err := attrs["account_id"].As(&accountID); err != nil || accountID != azureAccount {
+		t.Errorf("imported account_id = %q (%v), want %s", accountID, err, azureAccount)
+	}
+	if err := attrs["subscription_id"].As(&subscriptionID); err != nil || subscriptionID != azureSubscription {
+		t.Errorf("imported subscription_id = %q (%v), want %s", subscriptionID, err, azureSubscription)
+	}
+
+	bad, err := server.ImportResourceState(context.Background(), &tfprotov6.ImportResourceStateRequest{
+		TypeName: "streamsec_azure_scanner_hub",
+		ID:       azureSubscription,
+	})
+	if err != nil {
+		t.Fatalf("ImportResourceState: %s", err)
+	}
+	if !strings.Contains(protocolErrors(bad.Diagnostics), "<account_id>:<subscription_id>") {
+		t.Errorf("an id without the tenant gave %q, want the expected form", protocolErrors(bad.Diagnostics))
 	}
 }

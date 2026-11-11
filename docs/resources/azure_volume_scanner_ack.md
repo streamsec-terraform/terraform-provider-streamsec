@@ -22,6 +22,10 @@ resource "streamsec_azure_volume_scanner_ack" "production" {
   module_version  = "1.6.0"
   resource_group  = "streamsec-scanner-tf-00000000"
 
+  # The scanner's managed identity, for the console's access template when the
+  # scanner is a hub (streamsec_azure_scanner_hub).
+  principal_id = "00000000-0000-0000-0000-00000000000a"
+
   depends_on = [streamsec_azure_tenant_ack.main]
 }
 ```
@@ -37,4 +41,5 @@ resource "streamsec_azure_volume_scanner_ack" "production" {
 
 ### Optional
 
+- `principal_id` (String) The principal id of the scanner's managed identity. A hub, a scanner that also scans other subscriptions of the tenant, needs it in Stream Security for the console's access template, which grants that identity its roles there. Requires `resource_group`: it must be a user-assigned managed identity in that group, which Stream Security checks with Azure. Each acknowledgement records only the principal it is sent, so leaving it out clears it there.
 - `resource_group` (String) The resource group the scanner's resources are in, shown in Stream Security. Each acknowledgement records only the group it is sent, so leaving it out clears it there.
